@@ -38,6 +38,27 @@ router = Router()
 from states import AdminStates
 
 
+@router.message(Command("fix"))
+async def cmd_fix(message: Message, db: Database):
+    """
+    Исправить все проблемы с HTML тегами в контенте.
+    Доступно только админу.
+    """
+    if message.from_user.id != settings.admin_id:
+        return
+    
+    async with db.connection.cursor() as cursor:
+        # Удаляем все лишние </b>
+        await cursor.execute("UPDATE content SET text = REPLACE(text, '</b>', '')")
+        # Удаляем все лишние </i>
+        await cursor.execute("UPDATE content SET text = REPLACE(text, '</i>', '')")
+        # Удаляем все лишние </u>
+        await cursor.execute("UPDATE content SET text = REPLACE(text, '</u>', '')")
+        await db.connection.commit()
+    
+    await message.answer("✅ Все HTML теги исправлены!\n\nУдалены лишние закрывающие теги </b>, </i>, </u>")
+
+
 @router.message(Command("fixhtml"))
 async def cmd_fixhtml(message: Message, db: Database):
     """
