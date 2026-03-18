@@ -38,6 +38,23 @@ router = Router()
 from states import AdminStates
 
 
+@router.message(Command("fixhtml"))
+async def cmd_fixhtml(message: Message, db: Database):
+    """
+    Исправить лишние закрывающие теги </b> во всём контенте.
+    Доступно только админу.
+    """
+    if message.from_user.id != settings.admin_id:
+        return
+    
+    async with db.connection.cursor() as cursor:
+        await cursor.execute("UPDATE content SET text = REPLACE(text, '</b>', '')")
+        await db.connection.commit()
+        affected = cursor.rowcount
+    
+    await message.answer(f"✅ Исправлено строк: {affected}\n\nТег </b> удалён из всех записей.")
+
+
 # ========== ВХОД В АДМИНКУ ==========
 
 @router.message(Command("admin"))
