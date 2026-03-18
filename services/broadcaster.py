@@ -1,0 +1,90 @@
+"""
+Сервис рассылки сообщений пользователям.
+"""
+
+from aiogram import Bot
+from aiogram.types import Message
+from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
+from typing import Optional, Callable
+import asyncio
+
+from database.db import Database
+from logger import logger
+
+
+class Broadcaster:
+    """
+    Сервис массовой рассылки сообщений.
+    
+    Обрабатывает ошибки блокировки бота и лимитов.
+    """
+
+    def __init__(self, bot: Bot, db: Database):
+        self.bot = bot
+        self.db = db
+
+    async def broadcast(
+        self,
+        text: str,
+        parse_mode: str = "HTML",
+        reply_markup=None,
+        progress_callback: Optional[Callable] = None,
+    ) -> dict:
+        """
+        Отправить сообщение всем пользователям.
+        
+        Args:
+            text: Текст сообщения
+            parse_mode: Режим разметки (HTML/Markdown)
+            reply_markup: Клавиатура (опционально)
+            progress_callback: Callback для отслеживания прогресса
+        
+        Returns:
+            Словарь со статистикой {success, blocked, errors}
+        """
+        stats = {"success": 0, "blocked": 0, "errors": 0}
+
+        # Получаем всех пользователей
+        async with self.db.connection.cursor() as cursor:
+            await cursor.execute("SELECT telegram_id FROM users")
+            users = await cursor.fetchall()
+
+        total = len(users)
+        logger.info(f"Начало рассылки для {total} пользователей")
+
+        for i, (user_id,) in enumerate(users, 1):
+            try:
+                await self.bot.send_message(
+                    chat_id=user_id,
+                    text=text,
+                    parse_mode=parse_mode,
+                    reply_markup=reply_markup,
+                )
+                stats["success"] += 1
+
+                # Лимит Telegram: ~30 сообщений в секунду
+                await asyncio.sleep(0.035)
+
+            except TelegramRetryAfter as e:
+                # Лимит рассылки — ждём указанное время
+                logger.warning(f"Лимит рассылки: ждём {e.retry_after} сек")
+                await asyncio.sleep(e.retry_after)
+                stats["success"] += 1
+
+            except TelegramBadRequest as e:
+                if "bot was blocked" in str(e).lower():
+                    stats["blocked"] += 1
+                else:
+                    stats["errors"] += 1
+                    logger.error(f"Ошибка рассылки пользователю {user_id}: {e}")
+
+            except Exception as e:
+                stats["errors"] += 1
+                logger.error(f"Неожиданная ошибка рассылки пользователю {user_id}: {e}")
+
+            # Callback для прогресса
+            if progress_callback:
+                await progress_callback(i, total)
+
+        logger.info(f"Рассылка завершена: {stats}")
+        return stats
