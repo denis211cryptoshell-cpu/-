@@ -30,6 +30,7 @@ from messages.texts import (
     STATS_TEXT,
     CONFIRM_SAVE,
 )
+from utils.telegram_links import get_channel_id_from_link, parse_channel_input
 from logger import logger
 
 router = Router()
@@ -341,33 +342,71 @@ async def channel_add(callback: CallbackQuery, state: FSMContext):
 
     keyboard = get_back_button("admin_channels")
 
-    await callback.message.edit_text( 
+    await callback.message.edit_text(
         text="➕ <b>Добавление канала</b>\n\n"
-             "Отправьте ID или @username канала:\n"
-             "Пример: <code>@mychannel</code> или <code>-1001234567890</code>",
+             "Отправьте одно из:\n"
+             "• ID: <code>-1001234567890</code>\n"
+             "• Username: <code>@mychannel</code>\n"
+             "• Ссылка: <code>t.me/+AbCdEfGhIjK12345</code>\n\n"
+             "<i>Бот должен быть администратором в канале!</i>",
         reply_markup=keyboard,
         parse_mode="HTML",
     )
 
 
 @router.message(AdminStates.waiting_for_channel)
-async def save_channel(message: Message, state: FSMContext, channel_manager: ChannelManager):
+async def save_channel(message: Message, state: FSMContext, channel_manager: ChannelManager, bot: Bot):
     """
     Сохранение нового канала.
+    Поддерживает: ID, @username, пригласительные ссылки.
     """
-    channel_id = message.text.strip()
-
-    if not channel_id:
-        await message.answer("❌ Введите корректный ID или @username")
+    text = message.text.strip()
+    
+    if not text:
+        await message.answer("❌ Введите корректное значение")
         return
-
+    
+    # Разбираем ввод
+    channel_id, error = parse_channel_input(text)
+    
+    if error == "LINK":
+        # Это пригласительная ссылка — получаем ID
+        await message.answer("🔄 Получаю информацию о канале...")
+        
+        channel_id = await get_channel_id_from_link(bot, text)
+        
+        if not channel_id:
+            await message.answer(
+                "❌ Не удалось получить ID канала из ссылки.\n\n"
+                "Убедитесь что:\n"
+                "• Ссылка действительна\n"
+                "• Бот является администратором в канале"
+            )
+            return
+        
+        # Сохраняем полученный ID
+        success = await channel_manager.add_channel(channel_id)
+        
+        if success:
+            await message.answer(f"✅ Канал добавлен!\n\nID: <code>{channel_id}</code>", parse_mode="HTML")
+        else:
+            await message.answer("❌ Ошибка. Возможно, канал уже существует.")
+        
+        await state.clear()
+        return
+    
+    if error:
+        await message.answer(error)
+        return
+    
+    # Обычный режим (ID или username)
     success = await channel_manager.add_channel(channel_id)
-
+    
     if success:
         await message.answer(f"✅ Канал '{channel_id}' добавлен")
     else:
         await message.answer("❌ Ошибка. Возможно, канал уже существует.")
-
+    
     await state.clear()
 
 
