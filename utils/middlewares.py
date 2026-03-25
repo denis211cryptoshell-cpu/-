@@ -65,8 +65,9 @@ class ServiceMiddleware(BaseMiddleware):
 class AdminMiddleware(BaseMiddleware):
     """
     Middleware для проверки прав администратора.
-    
+
     Блокирует доступ к /admin и кнопкам админки для не-админов.
+    Пропускает все остальные запросы.
     """
 
     async def __call__(
@@ -83,22 +84,63 @@ class AdminMiddleware(BaseMiddleware):
         elif isinstance(event, CallbackQuery):
             user = event.from_user
 
-        if user:
-            # Проверяем ADMIN_ID
-            if user.id != settings.admin_id:
-                # Проверяем, является ли запрос к админке
-                is_admin_request = False
+        # Если нет пользователя — пропускаем (системные события)
+        if not user:
+            return await handler(event, data)
 
-                if isinstance(event, Message):
-                    is_admin_request = (
-                        (event.text and event.text.startswith("/admin")) or
-                        event.text == "🔧 Админка"
-                    )
-                elif isinstance(event, CallbackQuery):
-                    is_admin_request = event.data.startswith("admin_")
+        # Проверяем, является ли запрос к админке
+        is_admin_request = self._check_admin_request(event)
 
-                if is_admin_request:
-                    logger.warning(f"Попытка доступа в админку от пользователя {user.id}")
-                    return None  # Игнорируем запрос
+        # Если это НЕ админка — пропускаем всех
+        if not is_admin_request:
+            return await handler(event, data)
 
-        return await handler(event, data)
+        # Это админка — проверяем права
+        if user.id == settings.admin_id:
+            # Админ — пропускаем
+            logger.debug(f"Админ {user.id} получил доступ к админке")
+            return await handler(event, data)
+        else:
+            # НЕ админ — блокируем
+            logger.warning(
+                f"🚫 БЛОКИРОВКА: Пользователь {user.id} (@{user.username}) "
+                f"попытался получить доступ к админке"
+            )
+            # Возвращаем None — хендлер не выполнится
+            return None
+
+    def _check_admin_request(self, event: TelegramObject) -> bool:
+        """
+        Проверить, является ли запрос к админке.
+        
+        Args:
+            event: Событие Telegram
+        
+        Returns:
+            True если это запрос к админке
+        """
+        # Команда /admin
+        if isinstance(event, Message):
+            if event.text:
+                if event.text.startswith("/admin"):
+                    return True
+                if event.text == "🔧 Админка":
+                    return True
+        
+        # Callback админки
+        if isinstance(event, CallbackQuery):
+            if event.data:
+                # Все callback админки начинаются с admin_
+                if event.data.startswith("admin_"):
+                    return True
+                # Кнопки управления каналами
+                if event.data.startswith("channel_"):
+                    return True
+                # Кнопки управления кнопками
+                if event.data.startswith("btn_"):
+                    return True
+                # Кнопки рассылки
+                if event.data.startswith("broadcast_"):
+                    return True
+        
+        return False
