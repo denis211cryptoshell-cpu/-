@@ -76,7 +76,7 @@ def json_formatter(record: dict) -> str:
     Удобно для парсинга в ELK/Splunk/Grafana.
     """
     log_entry = {
-        "timestamp": record["time"].isoformat(),
+        "timestamp": str(record["time"]),
         "level": record["level"].name,
         "module": record["name"],
         "function": record["function"],
