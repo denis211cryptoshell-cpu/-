@@ -3,22 +3,41 @@ Inline-клавиатуры (под сообщениями).
 """
 
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from typing import List
+from typing import List, Optional, Dict
 
 
-def get_channel_buttons(channels: List[str]) -> InlineKeyboardMarkup:
+def get_channel_buttons(channels: List[str], invite_links: Optional[Dict[str, str]] = None) -> InlineKeyboardMarkup:
     """
-    Кнопки с ссылками на каналы для подписки.
+    Кнопки с пригласительными ссылками на каналы для подписки.
+
+    Args:
+        channels: Список каналов (ID или @username)
+        invite_links: Словарь пригласительных ссылок {channel_id: link}
     """
     keyboard: list[list[InlineKeyboardButton]] = []
 
     for channel in channels:
+        # Получаем ссылку из кэша или формируем стандартную
+        invite_url = None
+        if invite_links:
+            invite_url = invite_links.get(channel)
+        
+        if not invite_url:
+            # Фолбэк: обычная ссылка
+            if channel.startswith("@"):
+                invite_url = f"https://t.me/{channel}"
+            elif channel.startswith("-100"):
+                invite_url = f"https://t.me/+{channel.lstrip('-')}"
+            else:
+                invite_url = f"https://t.me/{channel.lstrip('@')}"
+
+        # Формируем отображаемое имя
         display_name = channel.replace("@", "")
         if channel.startswith("-100"):
             display_name = f"Канал {channel[-6:]}"
 
         keyboard.append(
-            [InlineKeyboardButton(text=f"📢 {display_name}", url=f"https://t.me/{channel.lstrip('@')}")]
+            [InlineKeyboardButton(text=f"📢 {display_name}", url=invite_url)]
         )
 
     keyboard.append([InlineKeyboardButton(text="✅ Я подписался", callback_data="check_subscription")])

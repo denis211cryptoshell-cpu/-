@@ -20,7 +20,7 @@ router = Router()
 async def cmd_start(message: Message, db: Database, bot: Bot, subscription_service: SubscriptionService):
     """
     Обработчик команды /start.
-    
+
     Проверяет подписку пользователя на каналы.
     Если не подписан — показывает кнопки каналов.
     Если подписан — открывает главное меню.
@@ -40,7 +40,11 @@ async def cmd_start(message: Message, db: Database, bot: Bot, subscription_servi
     else:
         # Не подписан — требуем подписку
         channels = subscription_service.channel_ids
-        keyboard = get_channel_buttons(channels)
+        
+        # Получаем пригласительные ссылки
+        invite_links = await subscription_service.get_invite_links()
+        
+        keyboard = get_channel_buttons(channels, invite_links)
 
         await message.answer(
             text=SUBSCRIPTION_REQUIRED,
@@ -64,7 +68,15 @@ async def check_subscription(callback: CallbackQuery, bot: Bot, db: Database, su
         await _show_main_menu(callback.message, db)
         logger.info(f"Пользователь {user_id} подписался на каналы")
     else:
-        # Всё ещё не подписан
+        # Всё ещё не подписан — обновляем ссылки (вдруг истекли)
+        channels = subscription_service.channel_ids
+        invite_links = await subscription_service.get_invite_links()
+        keyboard = get_channel_buttons(channels, invite_links)
+        
+        await callback.message.edit_text(
+            text=SUBSCRIPTION_REQUIRED,
+            reply_markup=keyboard,
+        )
         await callback.answer(
             text=SUBSCRIPTION_DENIED,
             show_alert=True,

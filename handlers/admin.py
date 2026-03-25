@@ -22,6 +22,7 @@ from keyboards.inline import get_view_result_button
 from keyboards.reply import get_main_menu
 from services.content_manager import ContentManager, ButtonManager, ChannelManager, StatsManager
 from services.broadcaster import Broadcaster
+from services.subscription import SubscriptionService
 from messages.texts import (
     ADMIN_PANEL_TEXT,
     CONTENT_EDIT_TEXT,
@@ -356,26 +357,26 @@ async def channel_add(callback: CallbackQuery, state: FSMContext):
 
 
 @router.message(AdminStates.waiting_for_channel)
-async def save_channel(message: Message, state: FSMContext, channel_manager: ChannelManager, bot: Bot):
+async def save_channel(message: Message, state: FSMContext, channel_manager: ChannelManager, bot: Bot, subscription_service: SubscriptionService):
     """
     Сохранение нового канала.
     Поддерживает: ID, @username, пригласительные ссылки.
     """
     text = message.text.strip()
-    
+
     if not text:
         await message.answer("❌ Введите корректное значение")
         return
-    
+
     # Разбираем ввод
     channel_id, error = parse_channel_input(text)
-    
+
     if error == "LINK":
         # Это пригласительная ссылка — получаем ID
         await message.answer("🔄 Получаю информацию о канале...")
-        
+
         channel_id = await get_channel_id_from_link(bot, text)
-        
+
         if not channel_id:
             await message.answer(
                 "❌ Не удалось получить ID канала из ссылки.\n\n"
@@ -384,30 +385,34 @@ async def save_channel(message: Message, state: FSMContext, channel_manager: Cha
                 "• Бот является администратором в канале"
             )
             return
-        
+
         # Сохраняем полученный ID
         success = await channel_manager.add_channel(channel_id)
-        
+
         if success:
+            # Очищаем кэш ссылок
+            subscription_service.clear_cache()
             await message.answer(f"✅ Канал добавлен!\n\nID: <code>{channel_id}</code>", parse_mode="HTML")
         else:
             await message.answer("❌ Ошибка. Возможно, канал уже существует.")
-        
+
         await state.clear()
         return
-    
+
     if error:
         await message.answer(error)
         return
-    
+
     # Обычный режим (ID или username)
     success = await channel_manager.add_channel(channel_id)
-    
+
     if success:
+        # Очищаем кэш ссылок
+        subscription_service.clear_cache()
         await message.answer(f"✅ Канал '{channel_id}' добавлен")
     else:
         await message.answer("❌ Ошибка. Возможно, канал уже существует.")
-    
+
     await state.clear()
 
 
@@ -429,7 +434,7 @@ async def channel_remove(callback: CallbackQuery, state: FSMContext):
 
 
 @router.message(AdminStates.waiting_for_channel_remove)
-async def delete_channel(message: Message, state: FSMContext, channel_manager: ChannelManager):
+async def delete_channel(message: Message, state: FSMContext, channel_manager: ChannelManager, subscription_service: SubscriptionService):
     """
     Удаление канала из БД.
     """
@@ -438,6 +443,8 @@ async def delete_channel(message: Message, state: FSMContext, channel_manager: C
     success = await channel_manager.remove_channel(channel_id)
 
     if success:
+        # Очищаем кэш ссылок
+        subscription_service.clear_cache()
         await message.answer(f"✅ Канал '{channel_id}' удалён")
     else:
         await message.answer("❌ Канал не найден.")

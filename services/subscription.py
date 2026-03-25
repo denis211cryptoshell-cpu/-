@@ -4,7 +4,8 @@
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
-from typing import List
+from typing import List, Dict, Optional
+from datetime import datetime, timedelta
 
 from logger import logger
 
@@ -12,21 +13,24 @@ from logger import logger
 class SubscriptionService:
     """
     Сервис проверки подписки пользователя на каналы.
-    
+
     Бот должен быть администратором в каналах для работы проверки.
+    Создаёт пригласительные ссылки для каждого канала.
     """
 
     def __init__(self, bot: Bot, channel_ids: List[str]):
         self.bot = bot
         self.channel_ids = channel_ids
+        # Кэш пригласительных ссылок: {channel_id: {"link": str, "expires": datetime}}
+        self._invite_cache: Dict[str, dict] = {}
 
     async def check_subscription(self, user_id: int) -> bool:
         """
         Проверить подписку пользователя на все обязательные каналы.
-        
+
         Args:
             user_id: Telegram ID пользователя
-        
+
         Returns:
             True если подписан на все каналы, иначе False
         """
@@ -46,11 +50,11 @@ class SubscriptionService:
     async def _check_channel(self, user_id: int, channel_id: str) -> bool:
         """
         Проверить подписку на один канал.
-        
+
         Args:
             user_id: Telegram ID пользователя
             channel_id: ID или @username канала
-        
+
         Returns:
             True если подписан, иначе False
         """
@@ -67,3 +71,79 @@ class SubscriptionService:
         except Exception as e:
             logger.error(f"Неожиданная ошибка при проверке {channel_id}: {e}")
             return False
+
+    async def get_invite_links(self) -> Dict[str, str]:
+        """
+        Получить пригласительные ссылки для всех каналов.
+
+        Создаёт новые ссылки если:
+        - Ссылки нет в кэше
+        - Истёк срок действия (2 часа)
+
+        Returns:
+            Словарь {channel_id: invite_link}
+        """
+        invite_links = {}
+        now = datetime.now()
+
+        for channel_id in self.channel_ids:
+            # Проверяем кэш
+            cached = self._invite_cache.get(channel_id)
+            
+            if cached and cached["expires"] > now:
+                # Ссылка ещё действительна
+                invite_links[channel_id] = cached["link"]
+                logger.debug(f"Используем кэшированную ссылку для {channel_id}")
+            else:
+                # Создаём новую ссылку
+                try:
+                    invite_link = await self._create_invite_link(channel_id)
+                    if invite_link:
+                        invite_links[channel_id] = invite_link
+                        # Кэшируем на 2 часа
+                        self._invite_cache[channel_id] = {
+                            "link": invite_link,
+                            "expires": now + timedelta(hours=2)
+                        }
+                        logger.info(f"Создана новая ссылка для {channel_id}")
+                except Exception as e:
+                    logger.error(f"Не удалось создать ссылку для {channel_id}: {e}")
+                    # Фолбэк на обычную ссылку
+                    if channel_id.startswith("@"):
+                        invite_links[channel_id] = f"https://t.me/{channel_id}"
+                    else:
+                        invite_links[channel_id] = f"https://t.me/{channel_id.lstrip('-')}"
+
+        return invite_links
+
+    async def _create_invite_link(self, channel_id: str) -> Optional[str]:
+        """
+        Создать пригласительную ссылку для канала.
+
+        Args:
+            channel_id: ID канала
+
+        Returns:
+            Ссылка или None если не удалось
+        """
+        try:
+            # Создаём многоразовую ссылку на 2 часа
+            invite = await self.bot.create_chat_invite_link(
+                chat_id=channel_id,
+                expire_date=datetime.now() + timedelta(hours=2),
+                creates_join_request=False,  # Автоматическое вступление
+            )
+            return invite.invite_link
+
+        except TelegramBadRequest as e:
+            logger.error(f"Не удалось создать ссылку для {channel_id}: {e}")
+            return None
+
+        except Exception as e:
+            logger.error(f"Ошибка создания ссылки для {channel_id}: {e}")
+            return None
+
+    def clear_cache(self) -> None:
+        """Очистить кэш ссылок (например, после изменения списка каналов)."""
+        self._invite_cache.clear()
+        logger.debug("Кэш пригласительных ссылок очищен")
