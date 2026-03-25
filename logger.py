@@ -91,13 +91,11 @@ def json_formatter(record: dict) -> str:
 
 def setup_logger() -> None:
     """
-    Инициализация логгера с улучшенными настройками.
-    
-    Создаёт 4 обработчика:
+    Инициализация логгера с упрощёнными настройками.
+
+    Создаёт 2 обработчика:
     1. Консоль (цветной вывод с эмодзи)
-    2. bot.log — все логи для отладки
-    3. errors.log — только ошибки (храним 30 дней)
-    4. bot.json.log — JSON формат для мониторинга
+    2. errors.log — только ошибки (храним 30 дней)
     """
     logger.remove()  # Удаляем дефолтный обработчик
 
@@ -110,29 +108,9 @@ def setup_logger() -> None:
         filter=filter_sensitive,
     )
 
-    # 2. Файл: Все логи (для отладки)
-    all_logs_path = Path("logs/bot.log")
-    all_logs_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    logger.add(
-        all_logs_path,
-        level="DEBUG",
-        format=(
-            "{time:YYYY-MM-DD HH:mm:ss} | "
-            "{level: <8} | "
-            "{name}:{function}:{line} | "
-            "{message}"
-        ),
-        rotation="10 MB",
-        compression="zip",
-        retention="7 days",
-        filter=filter_sensitive,
-        enqueue=True,
-    )
-
-    # 3. Файл: Только ошибки (для быстрого доступа)
+    # 2. Файл: Только ошибки (для быстрого доступа)
     errors_log_path = Path("logs/errors.log")
-    
+
     logger.add(
         errors_log_path,
         level="ERROR",
@@ -150,21 +128,7 @@ def setup_logger() -> None:
         enqueue=True,
     )
 
-    # 4. Файл: JSON (для продакшена/мониторинга)
-    json_log_path = Path("logs/bot.json.log")
-    
-    logger.add(
-        json_log_path,
-        level="INFO",
-        format=json_formatter,
-        rotation="10 MB",
-        compression="zip",
-        retention="30 days",
-        filter=filter_sensitive,
-        enqueue=True,
-    )
-
-    logger.info("🚀 Логгер инициализирован")
+    logger.debug("Логгер инициализирован")
 
 
 # ========== УДОБНЫЕ ФУНКЦИИ ==========
