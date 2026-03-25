@@ -15,6 +15,7 @@ from logger import setup_logger, logger, log_startup, log_shutdown
 from database import init_db, DB_TYPE, db
 from handlers import start, menu, admin, errors
 from utils import DatabaseMiddleware, ServiceMiddleware, AdminMiddleware
+from utils.rate_limiter import RateLimitMiddleware
 from utils.scheduler import scheduler_service
 from services.backup import backup_service
 
@@ -37,6 +38,7 @@ async def main():
     dp = Dispatcher()
 
     # Подключение middleware
+    dp.update.middleware(RateLimitMiddleware())
     dp.update.middleware(DatabaseMiddleware(db))
     dp.update.middleware(ServiceMiddleware(db, bot))
     dp.update.middleware(AdminMiddleware())

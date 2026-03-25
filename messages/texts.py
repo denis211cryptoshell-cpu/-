@@ -68,3 +68,13 @@ SECTION_LABELS = {
     "tariffs": "💰 Тарифы",
     "contact": "📝 Заказать",
 }
+
+# ========== RATE LIMITING ==========
+
+RATE_LIMIT_MESSAGE = (
+    "⏳ Пожалуйста, не спамите. Попробуйте через {retry_after} сек."
+)
+
+RATE_LIMIT_CALLBACK = (
+    "⏳ Не спамьте! Подождите {retry_after} сек."
+)

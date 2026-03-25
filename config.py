@@ -54,6 +54,18 @@ class Settings(BaseSettings):
         description="Уровень логирования (DEBUG, INFO, WARNING, ERROR)",
     )
 
+    # Rate Limiting
+    rate_limit_max_requests: int = Field(
+        default=10,
+        alias="RATE_LIMIT_MAX_REQUESTS",
+        description="Максимальное количество запросов в окно времени",
+    )
+    rate_limit_window: int = Field(
+        default=60,
+        alias="RATE_LIMIT_WINDOW",
+        description="Окно времени для rate limiting (в секундах)",
+    )
+
     @field_validator("channel_ids_raw", mode="before")
     @classmethod
     def parse_channel_ids(cls, value: str) -> str:
