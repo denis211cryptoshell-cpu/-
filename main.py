@@ -11,7 +11,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
 from config import settings
-from logger import setup_logger, logger
+from logger import setup_logger, logger, log_startup, log_shutdown
 from database.db import db, init_db
 from handlers import start, menu, admin, errors
 from utils import DatabaseMiddleware, ServiceMiddleware, AdminMiddleware
@@ -53,6 +53,10 @@ async def main():
         # Удаление вебхука (на всякий случай)
         await bot.delete_webhook(drop_pending_updates=True)
 
+        # Логирование запуска
+        bot_id = bot.id
+        log_startup(bot_id)
+
         # Запуск polling
         logger.info("Бот запущен в режиме polling")
         await dp.start_polling(bot)
@@ -61,11 +65,12 @@ async def main():
         logger.info("Получен сигнал остановки")
 
     except Exception as e:
-        logger.critical(f"Критическая ошибка: {e}", exc_info=True)
+        logger.critical(f"🔥 Критическая ошибка: {e}", exc_info=True)
         sys.exit(1)
 
     finally:
         # Корректное завершение
+        log_shutdown()
         await db.disconnect()
         await bot.session.close()
         logger.info("Бот остановлен")
