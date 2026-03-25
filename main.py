@@ -15,6 +15,8 @@ from logger import setup_logger, logger, log_startup, log_shutdown
 from database.db import db, init_db
 from handlers import start, menu, admin, errors
 from utils import DatabaseMiddleware, ServiceMiddleware, AdminMiddleware
+from utils.scheduler import scheduler_service
+from services.backup import backup_service
 
 
 async def main():
@@ -50,6 +52,13 @@ async def main():
         await init_db()
         logger.info("База данных инициализирована")
 
+        # Создаём стартовый бекап
+        backup_service.create_backup()
+        logger.info("Создан стартовый бекап БД")
+
+        # Запускаем планировщик задач (авто-бекап в 00:00)
+        scheduler_service.start()
+
         # Удаление вебхука (на всякий случай)
         await bot.delete_webhook(drop_pending_updates=True)
 
@@ -71,6 +80,7 @@ async def main():
     finally:
         # Корректное завершение
         log_shutdown()
+        scheduler_service.stop()
         await db.disconnect()
         await bot.session.close()
         logger.info("Бот остановлен")

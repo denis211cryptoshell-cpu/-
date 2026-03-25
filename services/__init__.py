@@ -5,6 +5,7 @@
 from services.subscription import SubscriptionService
 from services.content_manager import ContentManager, ButtonManager, ChannelManager, StatsManager
 from services.broadcaster import Broadcaster
+from services.backup import BackupService
 
 __all__ = [
     "SubscriptionService",
@@ -13,4 +14,5 @@ __all__ = [
     "ChannelManager",
     "StatsManager",
     "Broadcaster",
+    "BackupService",
 ]

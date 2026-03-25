@@ -4,6 +4,7 @@
 
 from utils.middlewares import AdminMiddleware, DatabaseMiddleware, ServiceMiddleware
 from utils.telegram_links import get_channel_id_from_link, parse_channel_input
+from utils.scheduler import scheduler_service
 
 __all__ = [
     "AdminMiddleware",
@@ -11,4 +12,5 @@ __all__ = [
     "ServiceMiddleware",
     "get_channel_id_from_link",
     "parse_channel_input",
+    "scheduler_service",
 ]
