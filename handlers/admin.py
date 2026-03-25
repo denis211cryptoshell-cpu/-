@@ -8,6 +8,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 
 from config import settings
+from database.db import Database
 from keyboards.admin import (
     get_admin_panel,
     get_content_edit_menu,

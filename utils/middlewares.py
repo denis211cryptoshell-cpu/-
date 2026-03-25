@@ -37,7 +37,7 @@ class DatabaseMiddleware(BaseMiddleware):
 class ServiceMiddleware(BaseMiddleware):
     """
     Middleware для внедрения сервисов в хендлеры.
-    
+
     Добавляет сервисы в словарь data каждого события.
     """
 
@@ -51,8 +51,11 @@ class ServiceMiddleware(BaseMiddleware):
         event: TelegramObject,
         data: Dict[str, Any],
     ) -> Any:
+        # Получаем каналы из БД (а не из .env!)
+        channel_ids = await self._get_channel_ids_from_db()
+        
         # Внедряем сервисы
-        data["subscription_service"] = SubscriptionService(self.bot, settings.channel_ids)
+        data["subscription_service"] = SubscriptionService(self.bot, channel_ids)
         data["content_manager"] = ContentManager(self.db)
         data["button_manager"] = ButtonManager(self.db)
         data["channel_manager"] = ChannelManager(self.db)
@@ -60,6 +63,22 @@ class ServiceMiddleware(BaseMiddleware):
         data["broadcaster"] = Broadcaster(self.bot, self.db)
 
         return await handler(event, data)
+    
+    async def _get_channel_ids_from_db(self) -> list[str]:
+        """
+        Получить список каналов для подписки из БД.
+        
+        Returns:
+            Список channel_id из таблицы channels
+        """
+        try:
+            async with self.db.connection.cursor() as cursor:
+                await cursor.execute("SELECT channel_id FROM channels WHERE is_required = 1")
+                rows = await cursor.fetchall()
+                return [row[0] for row in rows] if rows else []
+        except Exception:
+            # Если БД недоступна — возвращаем пустой список
+            return []
 
 
 class AdminMiddleware(BaseMiddleware):
