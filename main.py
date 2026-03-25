@@ -12,7 +12,7 @@ from aiogram.enums import ParseMode
 
 from config import settings
 from logger import setup_logger, logger, log_startup, log_shutdown
-from database.db import db, init_db
+from database import init_db, DB_TYPE
 from handlers import start, menu, admin, errors
 from utils import DatabaseMiddleware, ServiceMiddleware, AdminMiddleware
 from utils.scheduler import scheduler_service
@@ -50,14 +50,17 @@ async def main():
     try:
         # Инициализация БД
         await init_db()
-        logger.info("База данных инициализирована")
+        logger.info(f"База данных инициализирована ({DB_TYPE})")
 
-        # Создаём стартовый бекап
-        backup_service.create_backup()
-        logger.info("Создан стартовый бекап БД")
+        # Создаём стартовый бекап (только для SQLite)
+        if DB_TYPE == "sqlite":
+            backup_service.create_backup()
+            logger.info("Создан стартовый бекап БД")
 
         # Запускаем планировщик задач (авто-бекап в 00:00)
-        scheduler_service.start()
+        # Для PostgreSQL бекап не нужен — Supabase делает сам
+        if DB_TYPE == "sqlite":
+            scheduler_service.start()
 
         # Удаление вебхука (на всякий случай)
         await bot.delete_webhook(drop_pending_updates=True)
@@ -80,7 +83,8 @@ async def main():
     finally:
         # Корректное завершение
         log_shutdown()
-        scheduler_service.stop()
+        if DB_TYPE == "sqlite":
+            scheduler_service.stop()
         await db.disconnect()
         await bot.session.close()
         logger.info("Бот остановлен")

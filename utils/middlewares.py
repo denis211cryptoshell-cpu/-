@@ -6,7 +6,7 @@ from typing import Callable, Dict, Any, Awaitable
 from aiogram import BaseMiddleware
 from aiogram.types import Message, CallbackQuery, TelegramObject
 
-from database.db import Database
+from database import db, DB_TYPE
 from config import settings
 from services.subscription import SubscriptionService
 from services.content_manager import ContentManager, ButtonManager, ChannelManager, StatsManager
@@ -17,11 +17,11 @@ from logger import logger
 class DatabaseMiddleware(BaseMiddleware):
     """
     Middleware для внедрения экземпляра БД в хендлеры.
-    
+
     Добавляет `db` в словарь data каждого события.
     """
 
-    def __init__(self, db: Database):
+    def __init__(self, db):
         self.db = db
 
     async def __call__(
@@ -41,7 +41,7 @@ class ServiceMiddleware(BaseMiddleware):
     Добавляет сервисы в словарь data каждого события.
     """
 
-    def __init__(self, db: Database, bot):
+    def __init__(self, db, bot):
         self.db = db
         self.bot = bot
 
@@ -60,7 +60,7 @@ class ServiceMiddleware(BaseMiddleware):
         data["button_manager"] = ButtonManager(self.db)
         data["channel_manager"] = ChannelManager(self.db)
         data["stats_manager"] = StatsManager(self.db)
-        data["broadcaster"] = Broadcaster(self.bot, self.db)
+        data["broadcaster"] = Broadcaster(self.bot)
 
         return await handler(event, data)
     

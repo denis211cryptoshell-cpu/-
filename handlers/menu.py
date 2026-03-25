@@ -5,7 +5,7 @@
 from aiogram import Router, F
 from aiogram.types import Message
 
-from database.db import Database
+from database import db_adapter
 from services.content_manager import ContentManager, StatsManager
 from logger import logger
 
@@ -13,7 +13,7 @@ router = Router()
 
 
 @router.message()
-async def handle_menu_button(message: Message, db: Database, content_manager: ContentManager, stats_manager: StatsManager):
+async def handle_menu_button(message: Message, db, content_manager: ContentManager, stats_manager: StatsManager):
     """
     Обработка нажатий на кнопки главного меню.
     
@@ -45,22 +45,19 @@ async def handle_menu_button(message: Message, db: Database, content_manager: Co
         logger.warning(f"Раздел {section_key} не найден в БД")
 
 
-async def _get_section_by_label(db: Database, label: str) -> str | None:
+async def _get_section_by_label(db, label: str) -> str | None:
     """
     Найти ключ раздела по видимому названию кнопки.
-    
+
     Args:
         db: Экземпляр БД
         label: Текст кнопки от пользователя
-    
+
     Returns:
         Ключ раздела или None
     """
-    async with db.connection.cursor() as cursor:
-        await cursor.execute(
-            "SELECT name FROM buttons WHERE label = ?",
-            (label,),
-        )
-        row = await cursor.fetchone()
-
+    row = await db_adapter.fetchone(
+        "SELECT name FROM buttons WHERE label = ?",
+        label,
+    )
     return row[0] if row else None

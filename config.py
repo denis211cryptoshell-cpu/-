@@ -39,6 +39,13 @@ class Settings(BaseSettings):
         alias="DATABASE_PATH",
         description="Путь к файлу базы данных SQLite",
     )
+    
+    # PostgreSQL (опционально, для внешних БД)
+    database_url: str | None = Field(
+        default=None,
+        alias="DATABASE_URL",
+        description="URL подключения к PostgreSQL (Supabase, Neon и т.д.)",
+    )
 
     # Логирование
     log_level: str = Field(

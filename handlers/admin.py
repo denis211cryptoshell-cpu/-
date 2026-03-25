@@ -8,7 +8,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 
 from config import settings
-from database.db import Database
+from database import db_adapter
 from keyboards.admin import (
     get_admin_panel,
     get_content_edit_menu,
@@ -42,41 +42,35 @@ from states import AdminStates
 
 
 @router.message(Command("fix"))
-async def cmd_fix(message: Message, db: Database):
+async def cmd_fix(message: Message, db):
     """
     Исправить все проблемы с HTML тегами в контенте.
     Доступно только админу.
     """
     if message.from_user.id != settings.admin_id:
         return
-    
-    async with db.connection.cursor() as cursor:
-        # Удаляем все лишние </b>
-        await cursor.execute("UPDATE content SET text = REPLACE(text, '</b>', '')")
-        # Удаляем все лишние </i>
-        await cursor.execute("UPDATE content SET text = REPLACE(text, '</i>', '')")
-        # Удаляем все лишние </u>
-        await cursor.execute("UPDATE content SET text = REPLACE(text, '</u>', '')")
-        await db.connection.commit()
-    
+
+    # PostgreSQL не поддерживает REPLACE в том же формате
+    # Используем универсальный подход
+    await db_adapter.execute("UPDATE content SET text = REPLACE(text, '</b>', '')")
+    await db_adapter.execute("UPDATE content SET text = REPLACE(text, '</i>', '')")
+    await db_adapter.execute("UPDATE content SET text = REPLACE(text, '</u>', '')")
+
     await message.answer("✅ Все HTML теги исправлены!\n\nУдалены лишние закрывающие теги </b>, </i>, </u>")
 
 
 @router.message(Command("fixhtml"))
-async def cmd_fixhtml(message: Message, db: Database):
+async def cmd_fixhtml(message: Message, db):
     """
     Исправить лишние закрывающие теги </b> во всём контенте.
     Доступно только админу.
     """
     if message.from_user.id != settings.admin_id:
         return
-    
-    async with db.connection.cursor() as cursor:
-        await cursor.execute("UPDATE content SET text = REPLACE(text, '</b>', '')")
-        await db.connection.commit()
-        affected = cursor.rowcount
-    
-    await message.answer(f"✅ Исправлено строк: {affected}\n\nТег </b> удалён из всех записей.")
+
+    await db_adapter.execute("UPDATE content SET text = REPLACE(text, '</b>', '')")
+
+    await message.answer(f"✅ Теги исправлены!\n\nТег </b> удалён из всех записей.")
 
 
 # ========== ВХОД В АДМИНКУ ==========
@@ -509,9 +503,7 @@ async def send_broadcast(message: Message, state: FSMContext, db, broadcaster: B
     text = message.text
 
     # Получаем всех пользователей
-    async with db.connection.cursor() as cursor:
-        await cursor.execute("SELECT telegram_id FROM users")
-        users = await cursor.fetchall()
+    users = await db_adapter.fetchall("SELECT telegram_id FROM users")
 
     count = len(users)
     await message.answer(f"📨 Начало рассылки для {count} пользователей...")

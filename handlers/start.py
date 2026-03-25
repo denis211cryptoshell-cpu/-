@@ -6,7 +6,7 @@ from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
 
-from database.db import Database
+from database import db_adapter
 from keyboards.inline import get_channel_buttons
 from keyboards.reply import get_main_menu
 from services.subscription import SubscriptionService
@@ -17,7 +17,7 @@ router = Router()
 
 
 @router.message(Command("start"))
-async def cmd_start(message: Message, db: Database, bot: Bot, subscription_service: SubscriptionService):
+async def cmd_start(message: Message, db, bot: Bot, subscription_service: SubscriptionService):
     """
     Обработчик команды /start.
 
@@ -84,37 +84,35 @@ async def check_subscription(callback: CallbackQuery, bot: Bot, db: Database, su
         logger.debug(f"Пользователь {user_id} всё ещё не подписан")
 
 
-async def _save_user(db: Database, telegram_id: int, username: str | None) -> None:
+async def _save_user(db, telegram_id: int, username: str | None) -> None:
     """
     Сохранить пользователя в БД (или обновить last_seen).
     """
     from datetime import datetime
 
-    async with db.connection.cursor() as cursor:
-        # Проверяем существование
-        await cursor.execute(
-            "SELECT id FROM users WHERE telegram_id = ?",
-            (telegram_id,),
+    # Проверяем существование
+    exists = await db_adapter.fetchone(
+        "SELECT id FROM users WHERE telegram_id = ?",
+        telegram_id,
+    )
+
+    if exists:
+        # Обновляем last_seen
+        await db_adapter.execute(
+            "UPDATE users SET last_seen = ? WHERE telegram_id = ?",
+            datetime.now().isoformat(),
+            telegram_id,
         )
-        exists = await cursor.fetchone()
-
-        if exists:
-            # Обновляем last_seen
-            await cursor.execute(
-                "UPDATE users SET last_seen = ? WHERE telegram_id = ?",
-                (datetime.now().isoformat(), telegram_id),
-            )
-        else:
-            # Создаём нового пользователя
-            await cursor.execute(
-                "INSERT INTO users (telegram_id, username) VALUES (?, ?)",
-                (telegram_id, username),
-            )
-
-        await db.connection.commit()
+    else:
+        # Создаём нового пользователя
+        await db_adapter.execute(
+            "INSERT INTO users (telegram_id, username) VALUES (?, ?)",
+            telegram_id,
+            username,
+        )
 
 
-async def _show_main_menu(message: Message, db: Database) -> None:
+async def _show_main_menu(message: Message, db) -> None:
     """
     Показать главное меню пользователю.
     """
