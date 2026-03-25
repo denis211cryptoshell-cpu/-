@@ -527,10 +527,17 @@ async def send_broadcast(message: Message, state: FSMContext, db, broadcaster: B
 async def admin_exit(callback: CallbackQuery, db):
     """
     Выход из админки в главное меню.
+
+    Удаляем сообщение админки и отправляем новое с главным меню.
     """
+    # Получаем главное меню (ReplyKeyboardMarkup)
     keyboard = await get_main_menu(db)
 
-    await callback.message.edit_text( 
+    # Отправляем новое сообщение с главным меню
+    await callback.message.answer(
         text="🔙 Возврат в главное меню",
         reply_markup=keyboard,
     )
+
+    # Удаляем сообщение админ-панели
+    await callback.message.delete()
