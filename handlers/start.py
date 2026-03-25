@@ -54,7 +54,7 @@ async def cmd_start(message: Message, db, bot: Bot, subscription_service: Subscr
 
 
 @router.callback_query(F.data == "check_subscription")
-async def check_subscription(callback: CallbackQuery, bot: Bot, db: Database, subscription_service: SubscriptionService):
+async def check_subscription(callback: CallbackQuery, bot: Bot, db, subscription_service: SubscriptionService):
     """
     Проверка подписки после нажатия кнопки "✅ Я подписался".
     """

@@ -15,6 +15,9 @@ else:
     from database.db import db, init_db, get_db
     DB_TYPE = "sqlite"
 
-from database.adapter import DatabaseAdapter, db_adapter
+from database.adapter import DatabaseAdapter, get_db_adapter
+
+# Создаём адаптер после импорта db
+db_adapter = get_db_adapter(db)
 
 __all__ = ["get_db", "init_db", "db", "DB_TYPE", "DatabaseAdapter", "db_adapter"]

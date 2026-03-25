@@ -12,7 +12,7 @@ from aiogram.enums import ParseMode
 
 from config import settings
 from logger import setup_logger, logger, log_startup, log_shutdown
-from database import init_db, DB_TYPE
+from database import init_db, DB_TYPE, db
 from handlers import start, menu, admin, errors
 from utils import DatabaseMiddleware, ServiceMiddleware, AdminMiddleware
 from utils.scheduler import scheduler_service

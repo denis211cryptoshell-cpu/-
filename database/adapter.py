@@ -99,5 +99,7 @@ class DatabaseAdapter:
             return False
 
 
-# Глобальный адаптер
-db_adapter = DatabaseAdapter(db)
+# Глобальный адаптер (создаётся после импорта db)
+def get_db_adapter(db) -> DatabaseAdapter:
+    """Получить адаптер для БД."""
+    return DatabaseAdapter(db)
