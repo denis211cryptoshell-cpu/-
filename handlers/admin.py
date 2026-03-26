@@ -47,7 +47,7 @@ async def cmd_fix(message: Message, db):
     Исправить все проблемы с HTML тегами в контенте.
     Доступно только админу.
     """
-    if message.from_user.id != settings.admin_id:
+    if not settings.is_admin(message.from_user.id):
         return
 
     # PostgreSQL не поддерживает REPLACE в том же формате
@@ -65,7 +65,7 @@ async def cmd_fixhtml(message: Message, db):
     Исправить лишние закрывающие теги </b> во всём контенте.
     Доступно только админу.
     """
-    if message.from_user.id != settings.admin_id:
+    if not settings.is_admin(message.from_user.id):
         return
 
     await db_adapter.execute("UPDATE content SET text = REPLACE(text, '</b>', '')")
@@ -80,7 +80,7 @@ async def cmd_admin(message: Message, db):
     """
     Вход в админ-панель по команде /admin.
     """
-    if message.from_user.id != settings.admin_id:
+    if not settings.is_admin(message.from_user.id):
         logger.warning(f"Попытка доступа в админку от {message.from_user.id}")
         return
 
@@ -93,7 +93,7 @@ async def btn_admin(message: Message, db):
     """
     Вход в админ-панель по кнопке из главного меню.
     """
-    if message.from_user.id != settings.admin_id:
+    if not settings.is_admin(message.from_user.id):
         logger.warning(f"Попытка доступа в админку от {message.from_user.id}")
         return
 
@@ -541,3 +541,37 @@ async def admin_exit(callback: CallbackQuery, db):
 
     # Удаляем сообщение админ-панели
     await callback.message.delete()
+
+
+# ========== УПРАВЛЕНИЕ КЭШЕМ ==========
+
+@router.message(Command("cache"))
+async def cmd_cache(message: Message):
+    """
+    Управление кэшем: статистика и очистка.
+    Доступно только админу.
+    """
+    if not settings.is_admin(message.from_user.id):
+        return
+
+    from utils.cache import get_cache_stats, cache
+
+    args = message.text.split(maxsplit=1)
+    command = args[1] if len(args) > 1 else "stats"
+
+    if command == "stats":
+        # Показать статистику кэша
+        stats_text = await get_cache_stats()
+        await message.answer(stats_text)
+
+    elif command == "clear":
+        # Очистить весь кэш
+        await cache.clear()
+        await message.answer("🧹 Кэш полностью очищен")
+
+    else:
+        await message.answer(
+            "📊 Управление кэшем:\n\n"
+            "/cache stats - Статистика кэша\n"
+            "/cache clear - Очистить весь кэш"
+        )

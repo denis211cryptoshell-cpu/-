@@ -110,8 +110,8 @@ class RateLimitMiddleware(BaseMiddleware):
         if not user:
             return await handler(event, data)
         
-        # Администратор освобождён от rate limiting
-        if user.id == settings.admin_id:
+        # Администраторы освобождены от rate limiting
+        if settings.is_admin(user.id):
             return await handler(event, data)
         
         # Проверяем лимит

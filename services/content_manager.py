@@ -23,6 +23,7 @@ class ContentManager:
     async def get_content(self, section: str) -> Optional[str]:
         """
         Получить текст раздела.
+        Кэширует результат на 300 секунд (5 минут).
 
         Args:
             section: Ключ раздела (about, tech, faq...)
@@ -30,11 +31,29 @@ class ContentManager:
         Returns:
             Текст раздела или None если не найден
         """
+        # Формируем ключ кэша
+        cache_key = f"content:get_content:{section}"
+        
+        # Проверяем кэш
+        from utils.cache import cache as cache_service
+        cached_result = await cache_service.get(cache_key)
+        if cached_result is not None:
+            logger.debug(f"Кэш: get_content({section}) -> {cached_result[:50]}...")
+            return cached_result
+
+        # Получаем из БД
         row = await self.db.fetchone(
             "SELECT text FROM content WHERE section = ?",
             section,
         )
-        return row[0] if row else None
+        result = row[0] if row else None
+        
+        # Сохраняем в кэш на 300 секунд
+        if result is not None:
+            await cache_service.set(cache_key, result, 300)
+            logger.debug(f"Кэш: get_content({section}) -> кэшировано (TTL: 300s)")
+        
+        return result
 
     async def update_content(self, section: str, text: str) -> bool:
         """

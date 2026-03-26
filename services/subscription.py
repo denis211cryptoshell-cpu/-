@@ -50,6 +50,7 @@ class SubscriptionService:
     async def _check_channel(self, user_id: int, channel_id: str) -> bool:
         """
         Проверить подписку на один канал.
+        Кэширует результат на 60 секунд.
 
         Args:
             user_id: Telegram ID пользователя
@@ -58,10 +59,25 @@ class SubscriptionService:
         Returns:
             True если подписан, иначе False
         """
+        # Формируем ключ кэша
+        cache_key = f"subscription:_check_channel:{user_id}:{channel_id}"
+        
+        # Проверяем кэш
+        from utils.cache import cache as cache_service
+        cached_result = await cache_service.get(cache_key)
+        if cached_result is not None:
+            logger.debug(f"Кэш: {_check_channel.__name__} -> {cached_result}")
+            return cached_result
+
         try:
             member = await self.bot.get_chat_member(chat_id=channel_id, user_id=user_id)
             # Проверяем статусы членства
-            return member.status in ("member", "administrator", "creator")
+            result = member.status in ("member", "administrator", "creator")
+
+            # Сохраняем в кэш на 60 секунд
+            await cache_service.set(cache_key, result, 60)
+            logger.debug(f"Кэш: {_check_channel.__name__} -> {result} (TTL: 60s)")
+            return result
 
         except TelegramBadRequest as e:
             # Бот не админ в канале или канал недоступен

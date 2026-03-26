@@ -31,6 +31,15 @@ class SchedulerService:
             replace_existing=True,
         )
 
+        # Добавляем задачу очистки кэша каждые 5 минут
+        self.scheduler.add_job(
+            self._cleanup_cache,
+            CronTrigger(minute="*/5"),  # Каждые 5 минут
+            id="cleanup_cache",
+            name="Очистка кэша",
+            replace_existing=True,
+        )
+
         self.scheduler.start()
         logger.info("✅ Планировщик задач запущен")
 
@@ -47,6 +56,16 @@ class SchedulerService:
         """
         logger.info("🔄 Запуск ежедневного бекапа...")
         backup_service.create_backup()
+
+    async def _cleanup_cache(self) -> None:
+        """
+        Задача очистки просроченного кэша.
+        """
+        from utils.cache import cache
+        
+        deleted = await cache.cleanup_expired()
+        if deleted > 0:
+            logger.info(f"🧹 Очистка кэша: удалено {deleted} записей")
 
     def add_job(self, func, trigger, **kwargs) -> None:
         """

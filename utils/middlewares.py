@@ -115,7 +115,7 @@ class AdminMiddleware(BaseMiddleware):
             return await handler(event, data)
 
         # Это админка — проверяем права
-        if user.id == settings.admin_id:
+        if settings.is_admin(user.id):
             # Админ — пропускаем
             logger.debug(f"Админ {user.id} получил доступ к админке")
             return await handler(event, data)

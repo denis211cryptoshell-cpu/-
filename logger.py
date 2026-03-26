@@ -29,10 +29,11 @@ def filter_sensitive(record: dict) -> bool:
                 message = message.replace(token, f"{token[:10]}...")
         
         # Скрываем ADMIN_ID
-        if hasattr(settings, 'admin_id') and settings.admin_id:
-            admin_id = str(settings.admin_id)
-            if admin_id in message:
-                message = message.replace(admin_id, "***")
+        if hasattr(settings, 'admin_ids') and settings.admin_ids:
+            for admin_id in settings.admin_ids:
+                admin_id_str = str(admin_id)
+                if admin_id_str in message:
+                    message = message.replace(admin_id_str, "***")
         
         record["message"] = message
     except Exception:

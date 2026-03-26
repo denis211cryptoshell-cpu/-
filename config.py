@@ -24,7 +24,12 @@ class Settings(BaseSettings):
 
     # Telegram
     bot_token: str = Field(..., alias="BOT_TOKEN", description="Токен бота от @BotFather")
-    admin_id: int = Field(..., alias="ADMIN_ID", description="Telegram ID администратора")
+    admin_id: int = Field(..., alias="ADMIN_ID", description="Telegram ID основного администратора")
+    admin_ids_raw: str = Field(
+        default="",
+        alias="ADMIN_IDS",
+        description="Дополнительные Telegram ID администраторов (через запятую)",
+    )
 
     # Каналы для подписки (сырое значение из .env)
     channel_ids_raw: str = Field(
@@ -85,6 +90,18 @@ class Settings(BaseSettings):
     def channels_str(self) -> str:
         """Каналы как строка через запятую (для кнопок)."""
         return ", ".join(self.channel_ids) if self.channel_ids else ""
+
+    @property
+    def admin_ids(self) -> List[int]:
+        """Получить список всех ID администраторов."""
+        ids = [self.admin_id]  # Основной админ
+        if self.admin_ids_raw and self.admin_ids_raw.strip():
+            ids.extend(int(id.strip()) for id in self.admin_ids_raw.split(",") if id.strip())
+        return ids
+
+    def is_admin(self, user_id: int) -> bool:
+        """Проверить, является ли пользователь администратором."""
+        return user_id in self.admin_ids
 
 
 # Глобальный экземпляр настроек
