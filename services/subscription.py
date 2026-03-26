@@ -61,12 +61,12 @@ class SubscriptionService:
         """
         # Формируем ключ кэша
         cache_key = f"subscription:_check_channel:{user_id}:{channel_id}"
-        
+
         # Проверяем кэш
         from utils.cache import cache as cache_service
         cached_result = await cache_service.get(cache_key)
         if cached_result is not None:
-            logger.debug(f"Кэш: {_check_channel.__name__} -> {cached_result}")
+            logger.debug(f"Кэш: _check_channel -> {cached_result}")
             return cached_result
 
         try:
@@ -76,7 +76,7 @@ class SubscriptionService:
 
             # Сохраняем в кэш на 60 секунд
             await cache_service.set(cache_key, result, 60)
-            logger.debug(f"Кэш: {_check_channel.__name__} -> {result} (TTL: 60s)")
+            logger.debug(f"Кэш: _check_channel -> {result} (TTL: 60s)")
             return result
 
         except TelegramBadRequest as e:
