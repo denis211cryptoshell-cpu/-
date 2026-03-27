@@ -12,11 +12,12 @@ from aiogram.enums import ParseMode
 
 from config import settings
 from logger import setup_logger, logger, log_startup, log_shutdown
-from database import init_db, DB_TYPE, db
+from database import init_db, DB_TYPE, db, run_migrations
 from handlers import start, menu, admin, errors
 from utils import DatabaseMiddleware, ServiceMiddleware, AdminMiddleware
 from utils.rate_limiter import RateLimitMiddleware
 from utils.scheduler import scheduler_service
+from utils.delete_message_middleware import DeleteUserMessageMiddleware
 from services.backup import backup_service
 
 
@@ -38,6 +39,10 @@ async def main():
     dp = Dispatcher()
 
     # Подключение middleware
+    # DeleteUserMessageMiddleware должен быть ПЕРВЫМ для dp.message — чтобы удалять все сообщения
+    dp.message.middleware(DeleteUserMessageMiddleware())
+    
+    # Остальные middleware для dp.update
     dp.update.middleware(RateLimitMiddleware())
     dp.update.middleware(DatabaseMiddleware(db))
     dp.update.middleware(ServiceMiddleware(db, bot))
@@ -53,6 +58,10 @@ async def main():
         # Инициализация БД
         await init_db()
         logger.info(f"База данных инициализирована ({DB_TYPE})")
+
+        # Применяем миграции
+        await run_migrations(db)
+        logger.info("Миграции БД применены")
 
         # Создаём стартовый бекап (только для SQLite)
         if DB_TYPE == "sqlite":

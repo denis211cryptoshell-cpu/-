@@ -11,6 +11,7 @@ from config import settings
 from services.subscription import SubscriptionService
 from services.content_manager import ContentManager, ButtonManager, ChannelManager, StatsManager
 from services.broadcaster import Broadcaster
+from services.message_manager import MessageManager
 from logger import logger
 
 
@@ -53,7 +54,7 @@ class ServiceMiddleware(BaseMiddleware):
     ) -> Any:
         # Получаем каналы из БД (а не из .env!)
         channel_ids = await self._get_channel_ids_from_db()
-        
+
         # Внедряем сервисы
         data["subscription_service"] = SubscriptionService(self.bot, channel_ids)
         data["content_manager"] = ContentManager(self.db)
@@ -61,6 +62,7 @@ class ServiceMiddleware(BaseMiddleware):
         data["channel_manager"] = ChannelManager(self.db)
         data["stats_manager"] = StatsManager(self.db)
         data["broadcaster"] = Broadcaster(self.bot)
+        data["message_manager"] = MessageManager()
 
         return await handler(event, data)
     

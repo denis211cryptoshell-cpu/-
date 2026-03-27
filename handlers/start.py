@@ -10,6 +10,7 @@ from database import db_adapter
 from keyboards.inline import get_channel_buttons
 from keyboards.reply import get_main_menu
 from services.subscription import SubscriptionService
+from services.message_manager import MessageManager
 from messages.texts import START_MESSAGE, SUBSCRIPTION_REQUIRED, SUBSCRIPTION_DENIED
 from logger import logger
 
@@ -17,7 +18,13 @@ router = Router()
 
 
 @router.message(Command("start"))
-async def cmd_start(message: Message, db, bot: Bot, subscription_service: SubscriptionService):
+async def cmd_start(
+    message: Message,
+    db,
+    bot: Bot,
+    subscription_service: SubscriptionService,
+    message_manager: MessageManager,
+):
     """
     Обработчик команды /start.
 
@@ -27,6 +34,7 @@ async def cmd_start(message: Message, db, bot: Bot, subscription_service: Subscr
     """
     user_id = message.from_user.id
     username = message.from_user.username
+    chat_id = message.chat.id
 
     # Сохраняем пользователя в БД
     await _save_user(db, user_id, username)
@@ -36,25 +44,40 @@ async def cmd_start(message: Message, db, bot: Bot, subscription_service: Subscr
 
     if is_subscribed:
         # Пользователь подписан — показываем меню
-        await _show_main_menu(message, db)
+        await _show_main_menu(message, db, bot, message_manager, user_id, chat_id)
     else:
         # Не подписан — требуем подписку
         channels = subscription_service.channel_ids
-        
+
         # Получаем пригласительные ссылки
         invite_links = await subscription_service.get_invite_links()
-        
+
         keyboard = get_channel_buttons(channels, invite_links)
 
-        await message.answer(
+        # Сбрасываем last_message_id чтобы всегда отправлять новое сообщение
+        await message_manager.clear_last_message_id(user_id)
+        
+        # Отправляем новое сообщение с кнопками подписки
+        msg = await bot.send_message(
+            chat_id=chat_id,
             text=SUBSCRIPTION_REQUIRED,
             reply_markup=keyboard,
+            parse_mode="HTML",
         )
+        # Сохраняем message_id чтобы потом редактировать
+        await message_manager.set_last_message_id(user_id, msg.message_id)
+        
         logger.info(f"Пользователь {user_id} должен подписаться на каналы")
 
 
 @router.callback_query(F.data == "check_subscription")
-async def check_subscription(callback: CallbackQuery, bot: Bot, db, subscription_service: SubscriptionService):
+async def check_subscription(
+    callback: CallbackQuery,
+    bot: Bot,
+    db,
+    subscription_service: SubscriptionService,
+    message_manager: MessageManager,
+):
     """
     Проверка подписки после нажатия кнопки "✅ Я подписался".
     """
@@ -65,14 +88,16 @@ async def check_subscription(callback: CallbackQuery, bot: Bot, db, subscription
     if is_subscribed:
         # Подписка подтверждена
         await callback.message.delete()
-        await _show_main_menu(callback.message, db)
+        # Очищаем last_message_id чтобы следующее сообщение было новым
+        await message_manager.clear_last_message_id(user_id)
+        await _show_main_menu(callback.message, db, bot, message_manager, user_id, callback.message.chat.id)
         logger.info(f"Пользователь {user_id} подписался на каналы")
     else:
         # Всё ещё не подписан — обновляем ссылки (вдруг истекли)
         channels = subscription_service.channel_ids
         invite_links = await subscription_service.get_invite_links()
         keyboard = get_channel_buttons(channels, invite_links)
-        
+
         await callback.message.edit_text(
             text=SUBSCRIPTION_REQUIRED,
             reply_markup=keyboard,
@@ -112,13 +137,32 @@ async def _save_user(db, telegram_id: int, username: str | None) -> None:
         )
 
 
-async def _show_main_menu(message: Message, db) -> None:
+async def _show_main_menu(
+    message: Message,
+    db,
+    bot: Bot,
+    message_manager: MessageManager,
+    user_id: int,
+    chat_id: int,
+) -> None:
     """
     Показать главное меню пользователю.
+
+    Args:
+        message: Сообщение для получения контекста
+        db: Экземпляр БД
+        bot: Экземпляр бота
+        message_manager: Менеджер сообщений
+        user_id: Telegram ID пользователя
+        chat_id: ID чата
     """
     keyboard = await get_main_menu(db)
 
-    await message.answer(
+    await message_manager.send_or_edit(
+        bot=bot,
+        user_id=user_id,
+        chat_id=chat_id,
         text=START_MESSAGE,
         reply_markup=keyboard,
+        parse_mode="HTML",
     )

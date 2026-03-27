@@ -1,0 +1,41 @@
+[33mcommit 471985d711425c813c7a82ac6cb9373d9c18e06e[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m
+Author: Mulenrush <denis211.cryptoshell@gmail.com>
+Date:   Fri Mar 27 01:03:47 2026 +0300
+
+    feat: добавить кэширование и поддержку нескольких администраторов
+    
+    Нововведения:
+    - In-Memory кэш с TTL для снижения нагрузки на Telegram API
+    - Автоочистка кэша каждые 5 минут через APScheduler
+    - Команда /cache для управления кэшем (stats/clear)
+    - Поддержка нескольких ADMIN_IDS (мульти-админ)
+    - Метод settings.is_admin() для проверки прав
+    
+    Кэширование:
+    - Проверка подписки: TTL 60 сек
+    - Контент разделов: TTL 300 сек
+    
+    Изменения:
+    - utils/cache.py — новый модуль кэширования
+    - config.py — добавлены ADMIN_IDS, is_admin()
+    - services/subscription.py — кэш проверки подписки
+    - services/content_manager.py — кэш контента
+    - utils/scheduler.py — задача очистки кэша
+    - handlers/admin.py — команда /cache
+    - README.md — документация обновлена
+    
+    Безопасность:
+    - БД (data/*.db) исключена из коммита через .gitignore
+    - Rate limiting отключён для администраторов
+
+[33mcommit d905f0a469d56bc2979a37d47adde1ecaabd2e01[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m
+Author: denis211cryptoshell-cpu <denis211cryptoshell-cpu@users.noreply.github.com>
+Date:   Wed Mar 25 20:07:44 2026 +0300
+
+    fix: исправлена кнопка 'Выйти в меню' в админке
+
+[33mcommit 153af109c8dc1a65ba019ac3c039990e02818aa7[m
+Author: denis211cryptoshell-cpu <denis211cryptoshell-cpu@users.noreply.github.com>
+Date:   Wed Mar 25 16:41:10 2026 +0300
+
+    feat: добавлен Rate Limiting для защиты от спама

@@ -3,7 +3,7 @@
 """
 
 import re
-from typing import Optional
+from typing import Optional, Tuple
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
 from logger import logger
@@ -32,19 +32,7 @@ async def get_channel_id_from_link(bot: Bot, link: str) -> Optional[str]:
         # Очищаем ссылку от лишних символов
         link = link.strip()
 
-        # Проверяем полную URL-ссылку на канал (https://t.me/username)
-        match = re.match(r'https?://t\.me/([a-zA-Z0-9_]+)', link, re.IGNORECASE)
-        if match:
-            username = match.group(1)
-            # Проверяем, не invite link ли это
-            if username.startswith('+'):
-                # Это invite link, обрабатываем ниже
-                pass
-            else:
-                # Это username - возвращаем с @
-                return f"@{username}"
-
-        # Извлекаем часть после t.me/ для invite links
+        # Извлекаем часть после t.me/
         match = re.search(r't\.me/(?:joinchat/)?(\S+)', link, re.IGNORECASE)
         if not match:
             return None
@@ -54,31 +42,27 @@ async def get_channel_id_from_link(bot: Bot, link: str) -> Optional[str]:
         # Убираем возможные лишние символы (например, ?utm_source)
         invite_hash = invite_hash.split('?')[0].split('&')[0]
 
-        # Проверяем, не username ли это (начинается с @ или букв)
-        if invite_hash.startswith('@'):
-            return invite_hash  # Это username, возвращаем как есть
-
-        # Пытаемся получить информацию о чате через ссылку
+        # Пытаемся получить информацию о чате разными способами
+        
+        # 1. Пробуем как private invite link (с +)
         try:
-            # Для private invite links используем chat_invite_link
             chat = await bot.get_chat(f"https://t.me/+{invite_hash}")
             return str(chat.id)
-        except TelegramBadRequest as e:
-            if "CHAT_INVITE_LINK_INVALID" in str(e):
-                logger.error(f"Неверная пригласительная ссылка: {invite_hash}")
-                return None
-            # Пробуем как username
-            try:
-                chat = await bot.get_chat(f"@{invite_hash}")
-                return str(chat.id)
-            except:
-                pass
+        except TelegramBadRequest:
+            pass
 
-        # Если не получилось, пробуем как обычный username
+        # 2. Пробуем как username (с @)
         try:
             chat = await bot.get_chat(f"@{invite_hash}")
             return str(chat.id)
-        except:
+        except TelegramBadRequest:
+            pass
+
+        # 3. Пробуем без ничего (вдруг это ID)
+        try:
+            chat = await bot.get_chat(invite_hash)
+            return str(chat.id)
+        except TelegramBadRequest:
             pass
 
         return None
@@ -88,9 +72,19 @@ async def get_channel_id_from_link(bot: Bot, link: str) -> Optional[str]:
         return None
 
 
-def parse_channel_input(text: str) -> tuple[Optional[str], str]:
+def parse_channel_input(text: str) -> Tuple[Optional[str], str]:
     """
     Разобрать ввод пользователя и определить тип.
+
+    Поддерживает ВСЕ форматы:
+    - @username
+    - username (без @)
+    - -1001234567890 (ID)
+    - t.me/username
+    - t.me/+invitehash (private link)
+    - t.me/joinchat/invitehash
+    - https://t.me/username
+    - https://t.me/+invitehash
 
     Args:
         text: Ввод пользователя
@@ -98,6 +92,7 @@ def parse_channel_input(text: str) -> tuple[Optional[str], str]:
     Returns:
         Кортеж (channel_id, error_message)
         Если успешно: (channel_id, "")
+        Если ссылка: (None, "LINK") — специальная обработка
         Если ошибка: (None, "сообщение об ошибке")
     """
     text = text.strip()
@@ -107,17 +102,18 @@ def parse_channel_input(text: str) -> tuple[Optional[str], str]:
 
     # Приватная ссылка (t.me/+... или https://t.me/+...)
     if re.search(r'(?:https?://)?t\.me/\+', text, re.IGNORECASE):
-        return None, "LINK"  # Специальный маркер для обработки ссылки
+        return None, "LINK"
 
     # Ссылка на присоединение (t.me/joinchat/...)
     if re.search(r'(?:https?://)?t\.me/joinchat/', text, re.IGNORECASE):
         return None, "LINK"
 
-    # Полная URL-ссылка (https://t.me/username)
-    if re.match(r'https?://t\.me/([a-zA-Z0-9_]+)', text, re.IGNORECASE):
-        match = re.match(r'https?://t\.me/([a-zA-Z0-9_]+)', text, re.IGNORECASE)
-        if match:
-            username = match.group(1)
+    # Полная URL-ссылка (https://t.me/username или t.me/username)
+    match = re.match(r'(?:https?://)?t\.me/([a-zA-Z0-9_]+)', text, re.IGNORECASE)
+    if match:
+        username = match.group(1)
+        # Проверяем, не начинается ли с + (это уже обработано выше)
+        if not username.startswith('+'):
             return f"@{username}", ""
 
     # Username (@channel или channel без @)

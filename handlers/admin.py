@@ -524,16 +524,19 @@ async def send_broadcast(message: Message, state: FSMContext, db, broadcaster: B
 # ========== ВЫХОД ИЗ АДМИНКИ ==========
 
 @router.callback_query(F.data == "admin_exit")
-async def admin_exit(callback: CallbackQuery, db):
+async def admin_exit(callback: CallbackQuery, db, message_manager):
     """
     Выход из админки в главное меню.
 
-    Удаляем сообщение админки и отправляем новое с главным меню.
+    Сбрасываем last_message_id и отправляем новое сообщение с меню.
     """
     # Получаем главное меню (ReplyKeyboardMarkup)
     keyboard = await get_main_menu(db)
 
-    # Отправляем новое сообщение с главным меню
+    # Сбрасываем last_message_id чтобы следующее нажатие кнопки создало новое сообщение
+    await message_manager.clear_last_message_id(callback.from_user.id)
+
+    # Отправляем сообщение с главным меню
     await callback.message.answer(
         text="🔙 Возврат в главное меню",
         reply_markup=keyboard,

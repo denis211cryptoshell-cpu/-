@@ -78,6 +78,11 @@ class ContentManager:
                 section,
             )
             if success:
+                # Очищаем кэш для этого раздела
+                cache_key = f"content:get_content:{section}"
+                from utils.cache import cache as cache_service
+                await cache_service.delete(cache_key)
+                
                 logger.info(f"Контент раздела '{section}' обновлён")
                 return True
             return False

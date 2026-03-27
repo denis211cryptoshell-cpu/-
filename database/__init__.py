@@ -16,8 +16,9 @@ else:
     DB_TYPE = "sqlite"
 
 from database.adapter import DatabaseAdapter, get_db_adapter
+from database.migrations import run_migrations
 
 # Создаём адаптер после импорта db
 db_adapter = get_db_adapter(db)
 
-__all__ = ["get_db", "init_db", "db", "DB_TYPE", "DatabaseAdapter", "db_adapter"]
+__all__ = ["get_db", "init_db", "db", "DB_TYPE", "DatabaseAdapter", "db_adapter", "run_migrations"]
