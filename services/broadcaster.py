@@ -2,6 +2,7 @@
 Сервис рассылки сообщений пользователям.
 """
 
+import bleach
 from aiogram import Bot
 from aiogram.types import Message
 from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
@@ -10,6 +11,21 @@ import asyncio
 
 from database import db_adapter
 from logger import logger
+
+
+# Разрешённые HTML-теги для Telegram
+ALLOWED_TAGS = [
+    "b", "strong", "i", "em", "u", "ins", "s", "strike", "del",
+    "a", "code", "pre",
+]
+ALLOWED_ATTRIBUTES = {"a": ["href"]}
+
+
+def sanitize_html(text: str) -> str:
+    """Очистить HTML от опасных тегов."""
+    if not text:
+        return ""
+    return bleach.clean(text, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRIBUTES, strip=True)
 
 
 class Broadcaster:
@@ -42,6 +58,14 @@ class Broadcaster:
         Returns:
             Словарь со статистикой {success, blocked, errors}
         """
+        # САНТИЗИРУЕМ текст рассылки
+        clean_text = sanitize_html(text)
+        
+        if clean_text != text:
+            logger.warning("Текст рассылки был очищен от опасного HTML")
+            logger.debug(f"Исходный: {text[:100]}...")
+            logger.debug(f"Очищенный: {clean_text[:100]}...")
+
         stats = {"success": 0, "blocked": 0, "errors": 0}
 
         # Получаем всех пользователей
@@ -54,7 +78,7 @@ class Broadcaster:
             try:
                 await self.bot.send_message(
                     chat_id=user_id,
-                    text=text,
+                    text=clean_text,
                     parse_mode=parse_mode,
                     reply_markup=reply_markup,
                 )

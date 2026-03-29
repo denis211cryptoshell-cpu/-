@@ -3,11 +3,36 @@
 Поддерживает SQLite и PostgreSQL через db_adapter.
 """
 
+import bleach
 from datetime import datetime
 from typing import Optional
 
 from database import db_adapter
 from logger import logger
+
+
+# Разрешённые HTML-теги для Telegram
+ALLOWED_TAGS = [
+    "b", "strong", "i", "em", "u", "ins", "s", "strike", "del",
+    "a", "code", "pre",
+]
+
+# Разрешённые атрибуты
+ALLOWED_ATTRIBUTES = {"a": ["href"]}
+
+
+def sanitize_html(text: str) -> str:
+    """Очистить HTML от опасных тегов."""
+    if not text:
+        return ""
+    return bleach.clean(text, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRIBUTES, strip=True)
+
+
+def sanitize_button_label(label: str) -> str:
+    """Очистить название кнопки от всего HTML."""
+    if not label:
+        return ""
+    return bleach.clean(label, tags=[], strip=True)
 
 
 class ContentManager:
@@ -67,13 +92,21 @@ class ContentManager:
             True если успешно
         """
         try:
+            # САНТИЗИРУЕМ HTML перед сохранением
+            clean_text = sanitize_html(text)
+            
+            if clean_text != text:
+                logger.warning(f"Контент раздела '{section}' был очищен от опасного HTML")
+                logger.debug(f"Исходный: {text[:100]}...")
+                logger.debug(f"Очищенный: {clean_text[:100]}...")
+
             success = await self.db.execute(
                 """
                 UPDATE content
                 SET text = ?, updated_at = ?
                 WHERE section = ?
                 """,
-                text,
+                clean_text,
                 datetime.now().isoformat(),
                 section,
             )
@@ -82,7 +115,7 @@ class ContentManager:
                 cache_key = f"content:get_content:{section}"
                 from utils.cache import cache as cache_service
                 await cache_service.delete(cache_key)
-                
+
                 logger.info(f"Контент раздела '{section}' обновлён")
                 return True
             return False
@@ -143,15 +176,21 @@ class ButtonManager:
             True если успешно
         """
         try:
-            logger.debug(f"ButtonManager.update_label: обновление кнопки '{name}' на '{new_label}'")
+            # САНТИЗИРУЕМ название кнопки (убираем весь HTML)
+            clean_label = sanitize_button_label(new_label)
             
+            if clean_label != new_label:
+                logger.warning(f"Название кнопки '{name}' было очищено от HTML")
+                logger.debug(f"Исходное: {new_label}")
+                logger.debug(f"Очищенное: {clean_label}")
+
             success = await self.db.execute(
                 "UPDATE buttons SET label = ? WHERE name = ?",
-                new_label,
+                clean_label,
                 name,
             )
             if success:
-                logger.info(f"Название кнопки '{name}' обновлено на '{new_label}'")
+                logger.info(f"Название кнопки '{name}' обновлено на '{clean_label}'")
                 return True
             logger.warning(f"ButtonManager.update_label: запрос не выполнился, кнопка '{name}'")
             return False
