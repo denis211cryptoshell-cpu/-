@@ -69,7 +69,7 @@ def get_content_edit_menu() -> InlineKeyboardMarkup:
 def get_buttons_manage_menu() -> InlineKeyboardMarkup:
     """
     Меню управления кнопками главного меню.
-    
+
     Returns:
         InlineKeyboardMarkup со списком кнопок
     """
@@ -77,6 +77,46 @@ def get_buttons_manage_menu() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="✏️ Изменить названия", callback_data="btn_edit_labels")],
         [InlineKeyboardButton(text="👁️ Показать/скрыть", callback_data="btn_toggle_visibility")],
         [InlineKeyboardButton(text="🔙 Назад", callback_data="admin_main")],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
+def get_buttons_edit_list(buttons: list[tuple]) -> InlineKeyboardMarkup:
+    """
+    Список кнопок для редактирования названий.
+
+    Args:
+        buttons: Список кортежей (name, label, is_active)
+
+    Returns:
+        InlineKeyboardMarkup со списком кнопок для редактирования
+    """
+    keyboard: list[list[InlineKeyboardButton]] = []
+
+    for name, label, is_active in buttons:
+        status = "✅" if is_active else "❌"
+        keyboard.append([
+            InlineKeyboardButton(text=f"{status} {label}", callback_data=f"btn_edit_label_{name}")
+        ])
+
+    keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data="admin_buttons")])
+
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
+def get_button_edit_menu(button_name: str, current_label: str) -> InlineKeyboardMarkup:
+    """
+    Меню редактирования конкретной кнопки.
+
+    Args:
+        button_name: Ключ кнопки
+        current_label: Текущее название
+
+    Returns:
+        InlineKeyboardMarkup с кнопкой отмены
+    """
+    keyboard = [
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="btn_edit_labels")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
@@ -167,10 +207,10 @@ def get_button_toggle_row(button_name: str, is_active: bool) -> InlineKeyboardMa
 def get_buttons_list(buttons: list[tuple]) -> InlineKeyboardMarkup:
     """
     Список кнопок меню с индикатором активности.
-    
+
     Args:
         buttons: Список кортежей (name, label, is_active)
-    
+
     Returns:
         InlineKeyboardMarkup со списком кнопок
     """
@@ -179,7 +219,7 @@ def get_buttons_list(buttons: list[tuple]) -> InlineKeyboardMarkup:
     for name, label, is_active in buttons:
         status = "✅" if is_active else "❌"
         keyboard.append([
-            InlineKeyboardButton(text=f"{status} {label}", callback_data=f"btn_edit_{name}")
+            InlineKeyboardButton(text=f"{status} {label}", callback_data=f"btn_toggle_{name}")
         ])
 
     keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data="admin_main")])

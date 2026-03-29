@@ -17,6 +17,8 @@ from keyboards.admin import (
     get_broadcast_menu,
     get_back_button,
     get_buttons_list,
+    get_buttons_edit_list,
+    get_button_edit_menu,
 )
 from keyboards.inline import get_view_result_button
 from keyboards.reply import get_main_menu
@@ -223,7 +225,7 @@ async def btn_toggle_visibility(callback: CallbackQuery, button_manager: ButtonM
     )
 
 
-@router.callback_query(F.data.startswith("btn_edit_"))
+@router.callback_query(F.data.startswith("btn_toggle_"))
 async def toggle_button(callback: CallbackQuery, button_manager: ButtonManager):
     """
     Переключение видимости конкретной кнопки.
@@ -261,50 +263,128 @@ async def toggle_button(callback: CallbackQuery, button_manager: ButtonManager):
 
 
 @router.callback_query(F.data == "btn_edit_labels")
-async def btn_edit_labels(callback: CallbackQuery, state: FSMContext):
+async def btn_edit_labels(callback: CallbackQuery, button_manager: ButtonManager):
     """
-    Редактирование названий кнопок.
+    Редактирование названий кнопок — показ списка кнопок.
     """
-    await state.set_state(AdminStates.waiting_for_button_name)
+    logger.debug(f"btn_edit_labels: пользователь {callback.from_user.id}")
+    
+    try:
+        buttons = await button_manager.get_all_buttons()
+        logger.debug(f"btn_edit_labels: получено кнопок: {len(buttons)}")
+        logger.debug(f"btn_edit_labels: кнопки: {buttons}")
+        
+        keyboard = get_buttons_edit_list(buttons)
 
-    keyboard = get_back_button("admin_buttons")
+        await callback.message.edit_text(
+            text="✏️ <b>Изменение названия кнопки</b>\n\n"
+                 "Выберите кнопку для редактирования:\n\n"
+                 "✅ — активна, ❌ — скрыта",
+            reply_markup=keyboard,
+            parse_mode="HTML",
+        )
+        logger.info(f"btn_edit_labels: меню отображено успешно")
+    except Exception as e:
+        logger.error(f"btn_edit_labels: ошибка: {e}", exc_info=True)
+        await callback.answer(f"❌ Ошибка: {e}", show_alert=True)
 
-    await callback.message.edit_text( 
-        text="✏️ <b>Изменение названия кнопки</b>\n\n"
-             "Отправьте название кнопки в формате:\n"
-             "<code>ключ|новое название</code>\n\n"
-             "Пример: <code>about|👤 Обо мне</code>",
-        reply_markup=keyboard,
-        parse_mode="HTML",
-    )
+
+@router.callback_query(F.data.startswith("btn_edit_label_"))
+async def btn_edit_label_start(callback: CallbackQuery, state: FSMContext, button_manager: ButtonManager):
+    """
+    Начало редактирования названия конкретной кнопки.
+    """
+    logger.debug(f"btn_edit_label_start: callback_data={callback.data}, from_user={callback.from_user.id}")
+    
+    try:
+        button_name = callback.data.split("_", 3)[3]
+        logger.debug(f"btn_edit_label_start: извлечено имя кнопки: {button_name}")
+        
+        # Получаем текущее название
+        buttons = await button_manager.get_all_buttons()
+        logger.debug(f"btn_edit_label_start: получено кнопок: {len(buttons)}")
+        
+        current_label = None
+        for name, label, is_active in buttons:
+            if name == button_name:
+                current_label = label
+                break
+
+        if current_label is None:
+            logger.error(f"btn_edit_label_start: кнопка '{button_name}' не найдена")
+            await callback.answer("❌ Кнопка не найдена", show_alert=True)
+            return
+
+        logger.debug(f"btn_edit_label_start: текущее название: {current_label}")
+
+        # Сохраняем в состояние
+        await state.update_data(button_name=button_name, current_label=current_label)
+        await state.set_state(AdminStates.waiting_for_button_label)
+        logger.debug(f"btn_edit_label_start: состояние установлено: waiting_for_button_label")
+
+        keyboard = get_button_edit_menu(button_name, current_label)
+
+        await callback.message.edit_text(
+            text=f"✏️ <b>Редактирование кнопки</b>\n\n"
+                 f"Ключ: <code>{button_name}</code>\n"
+                 f"Текущее название: <code>{current_label}</code>\n\n"
+                 "Отправьте новое название для этой кнопки:",
+            reply_markup=keyboard,
+            parse_mode="HTML",
+        )
+        logger.info(f"btn_edit_label_start: меню редактирования отображено для кнопки '{button_name}'")
+    except Exception as e:
+        logger.error(f"btn_edit_label_start: ошибка: {e}", exc_info=True)
+        await callback.answer(f"❌ Ошибка: {e}", show_alert=True)
 
 
-@router.message(AdminStates.waiting_for_button_name)
+@router.message(AdminStates.waiting_for_button_label)
 async def save_button_label(message: Message, state: FSMContext, button_manager: ButtonManager):
     """
     Сохранение нового названия кнопки.
     """
-    text = message.text.strip()
+    logger.debug(f"save_button_label: пользователь {message.from_user.id}, текст: {message.text}")
+    
+    try:
+        data = await state.get_data()
+        logger.debug(f"save_button_label: данные состояния: {data}")
+        
+        button_name = data.get("button_name")
 
-    if "|" not in text:
-        await message.answer("❌ Неверный формат. Используйте: <code>ключ|название</code>", parse_mode="HTML")
-        return
+        if not button_name:
+            logger.error("save_button_label: кнопка не определена в состоянии")
+            await message.answer("❌ Ошибка: кнопка не определена")
+            await state.clear()
+            return
 
-    parts = text.split("|", 1)
-    if len(parts) != 2:
-        await message.answer("❌ Неверный формат. Используйте: <code>ключ|название</code>", parse_mode="HTML")
-        return
+        new_label = message.text.strip()
+        logger.debug(f"save_button_label: обновление кнопки '{button_name}' на '{new_label}'")
 
-    button_key, new_label = parts
+        success = await button_manager.update_label(button_name, new_label)
+        logger.debug(f"save_button_label: результат обновления: {success}")
 
-    success = await button_manager.update_label(button_key.strip(), new_label.strip())
+        if success:
+            await message.answer(f"✅ Название кнопки обновлено на '{new_label}'")
+            
+            # Возвращаемся к списку кнопок
+            buttons = await button_manager.get_all_buttons()
+            keyboard = get_buttons_edit_list(buttons)
+            await message.answer(
+                text="✏️ <b>Изменение названия кнопки</b>\n\n"
+                     "Выберите кнопку для редактирования:",
+                reply_markup=keyboard,
+                parse_mode="HTML",
+            )
+            logger.info(f"save_button_label: кнопка '{button_name}' успешно обновлена")
+        else:
+            await message.answer("❌ Ошибка при обновлении. Попробуйте снова.")
+            logger.error(f"save_button_label: не удалось обновить кнопку '{button_name}'")
 
-    if success:
-        await message.answer(f"✅ Название кнопки '{button_key}' обновлено")
-    else:
-        await message.answer("❌ Ошибка при обновлении. Проверьте ключ кнопки.")
-
-    await state.clear()
+        await state.clear()
+    except Exception as e:
+        logger.error(f"save_button_label: ошибка: {e}", exc_info=True)
+        await message.answer(f"❌ Ошибка: {e}")
+        await state.clear()
 
 
 # ========== УПРАВЛЕНИЕ КАНАЛАМИ ==========

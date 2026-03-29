@@ -123,7 +123,13 @@ class ButtonManager:
         Returns:
             Список кортежей (name, label, is_active)
         """
-        return await self.db.fetchall("SELECT name, label, is_active FROM buttons ORDER BY id")
+        try:
+            result = await self.db.fetchall("SELECT name, label, is_active FROM buttons ORDER BY id")
+            logger.debug(f"ButtonManager.get_all_buttons: получено {len(result)} кнопок: {result}")
+            return result
+        except Exception as e:
+            logger.error(f"ButtonManager.get_all_buttons: ошибка: {e}", exc_info=True)
+            return []
 
     async def update_label(self, name: str, new_label: str) -> bool:
         """
@@ -137,6 +143,8 @@ class ButtonManager:
             True если успешно
         """
         try:
+            logger.debug(f"ButtonManager.update_label: обновление кнопки '{name}' на '{new_label}'")
+            
             success = await self.db.execute(
                 "UPDATE buttons SET label = ? WHERE name = ?",
                 new_label,
@@ -145,9 +153,10 @@ class ButtonManager:
             if success:
                 logger.info(f"Название кнопки '{name}' обновлено на '{new_label}'")
                 return True
+            logger.warning(f"ButtonManager.update_label: запрос не выполнился, кнопка '{name}'")
             return False
         except Exception as e:
-            logger.error(f"Ошибка обновления кнопки {name}: {e}")
+            logger.error(f"ButtonManager.update_label: ошибка: {e}", exc_info=True)
             return False
 
     async def toggle_visibility(self, name: str, is_active: bool) -> bool:
