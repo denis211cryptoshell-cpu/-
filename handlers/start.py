@@ -11,7 +11,8 @@ from keyboards.inline import get_channel_buttons
 from keyboards.reply import get_main_menu
 from services.subscription import SubscriptionService
 from services.message_manager import MessageManager
-from messages.texts import START_MESSAGE, SUBSCRIPTION_REQUIRED, SUBSCRIPTION_DENIED
+from services.content_manager import ContentManager
+from messages.texts import SUBSCRIPTION_REQUIRED, SUBSCRIPTION_DENIED
 from logger import logger
 
 router = Router()
@@ -24,6 +25,7 @@ async def cmd_start(
     bot: Bot,
     subscription_service: SubscriptionService,
     message_manager: MessageManager,
+    content_manager: ContentManager,
 ):
     """
     Обработчик команды /start.
@@ -44,7 +46,7 @@ async def cmd_start(
 
     if is_subscribed:
         # Пользователь подписан — показываем меню
-        await _show_main_menu(message, db, bot, message_manager, user_id, chat_id)
+        await _show_main_menu(message, db, bot, message_manager, user_id, chat_id, content_manager)
     else:
         # Не подписан — требуем подписку
         channels = subscription_service.channel_ids
@@ -77,6 +79,7 @@ async def check_subscription(
     db,
     subscription_service: SubscriptionService,
     message_manager: MessageManager,
+    content_manager: ContentManager,
 ):
     """
     Проверка подписки после нажатия кнопки "✅ Я подписался".
@@ -90,7 +93,7 @@ async def check_subscription(
         await callback.message.delete()
         # Очищаем last_message_id чтобы следующее сообщение было новым
         await message_manager.clear_last_message_id(user_id)
-        await _show_main_menu(callback.message, db, bot, message_manager, user_id, callback.message.chat.id)
+        await _show_main_menu(callback.message, db, bot, message_manager, user_id, callback.message.chat.id, content_manager)
         logger.info(f"Пользователь {user_id} подписался на каналы")
     else:
         # Всё ещё не подписан — обновляем ссылки (вдруг истекли)
@@ -144,6 +147,7 @@ async def _show_main_menu(
     message_manager: MessageManager,
     user_id: int,
     chat_id: int,
+    content_manager: ContentManager = None,
 ) -> None:
     """
     Показать главное меню пользователю.
@@ -155,14 +159,20 @@ async def _show_main_menu(
         message_manager: Менеджер сообщений
         user_id: Telegram ID пользователя
         chat_id: ID чата
+        content_manager: Менеджер контента (опционально)
     """
     keyboard = await get_main_menu(db)
+
+    # Получаем приветствие из БД
+    greeting_text = await content_manager.get_content("greeting") if content_manager else None
+    if not greeting_text:
+        greeting_text = "👋 <b>Привет! Я бот-визитка разработчика.</b>\n\nВыберите раздел в меню ниже, чтобы узнать больше обо мне и моих услугах."
 
     await message_manager.send_or_edit(
         bot=bot,
         user_id=user_id,
         chat_id=chat_id,
-        text=START_MESSAGE,
+        text=greeting_text,
         reply_markup=keyboard,
         parse_mode="HTML",
     )

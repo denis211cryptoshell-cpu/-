@@ -105,6 +105,7 @@ CREATE INDEX IF NOT EXISTS idx_channels_required ON channels(is_required);
 INSERT_DEFAULTS_SQL = """
 -- Контент разделов (дефолтные тексты)
 INSERT OR IGNORE INTO content (section, text) VALUES
+    ('greeting', '👋 <b>Привет! Я бот-визитка разработчика.</b>\n\nВыберите раздел в меню ниже, чтобы узнать больше обо мне и моих услугах.'),
     ('about', '<b>👤 Обо мне</b>\n\nПривет! Я — профессиональный разработчик с опытом создания Telegram-ботов и веб-приложений.\n\n🔹 Python, Aiogram, FastAPI\n🔹 Асинхронная архитектура\n🔹 Чистый и поддерживаемый код\n\nСвяжитесь со мной для обсуждения проекта!'),
     ('tech', '<b>🛠 Технический стек</b>\n\n<b>Backend:</b>\n• Python 3.10+\n• FastAPI, Aiogram 3.x\n• SQLAlchemy, aiosqlite\n• Redis, Celery\n\n<b>Frontend:</b>\n• React, TypeScript\n• Bootstrap, Material UI\n\n<b>DevOps:</b>\n• Docker, Docker Compose\n• Nginx, Gunicorn\n• Git, CI/CD'),
     ('faq', '<b>❓ FAQ</b>\n\n<b>1. Как заказать разработку?</b>\nНажмите кнопку "📝 Заказать" и опишите задачу.\n\n<b>2. Какие сроки?</b>\nОт 3 дней для простых ботов, от 2 недель для сложных систем.\n\n<b>3. Есть ли гарантия?</b>\nДа, 30 дней бесплатной поддержки после сдачи.\n\n<b>4. Как происходит оплата?</b>\n50% предоплата, 50% после принятия работы.'),
@@ -138,6 +139,7 @@ INSERT OR IGNORE INTO stats (button_name, clicks) VALUES
 INSERT_DEFAULTS_POSTGRES_SQL = """
 -- Контент разделов (дефолтные тексты)
 INSERT INTO content (section, text) VALUES
+    ('greeting', '👋 <b>Привет! Я бот-визитка разработчика.</b>\n\nВыберите раздел в меню ниже, чтобы узнать больше обо мне и моих услугах.'),
     ('about', '<b>👤 Обо мне</b>\n\nПривет! Я — профессиональный разработчик с опытом создания Telegram-ботов и веб-приложений.\n\n🔹 Python, Aiogram, FastAPI\n🔹 Асинхронная архитектура\n🔹 Чистый и поддерживаемый код\n\nСвяжитесь со мной для обсуждения проекта!'),
     ('tech', '<b>🛠 Технический стек</b>\n\n<b>Backend:</b>\n• Python 3.10+\n• FastAPI, Aiogram 3.x\n• SQLAlchemy, aiosqlite\n• Redis, Celery\n\n<b>Frontend:</b>\n• React, TypeScript\n• Bootstrap, Material UI\n\n<b>DevOps:</b>\n• Docker, Docker Compose\n• Nginx, Gunicorn\n• Git, CI/CD'),
     ('faq', '<b>❓ FAQ</b>\n\n<b>1. Как заказать разработку?</b>\nНажмите кнопку "📝 Заказать" и опишите задачу.\n\n<b>2. Какие сроки?</b>\nОт 3 дней для простых ботов, от 2 недель для сложных систем.\n\n<b>3. Есть ли гарантия?</b>\nДа, 30 дней бесплатной поддержки после сдачи.\n\n<b>4. Как происходит оплата?</b>\n50% предоплата, 50% после принятия работы.'),

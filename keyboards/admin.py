@@ -34,11 +34,12 @@ def get_admin_panel() -> InlineKeyboardMarkup:
 def get_content_edit_menu() -> InlineKeyboardMarkup:
     """
     Меню выбора раздела для редактирования.
-    
+
     Returns:
         InlineKeyboardMarkup с разделами контента
     """
     sections = [
+        ("greeting", "👋 Приветствие"),
         ("about", "👤 Обо мне"),
         ("tech", "🛠 Тех. стек"),
         ("faq", "❓ FAQ"),

@@ -13,6 +13,10 @@ MIGRATIONS = [
         "name": "001_add_last_message_id",
         "description": "Добавление колонки last_message_id в таблицу users",
     },
+    {
+        "name": "002_add_greeting",
+        "description": "Добавление приветствия (greeting) в таблицу content",
+    },
 ]
 
 
@@ -53,11 +57,18 @@ async def apply_migration(cursor, version: int, migration_name: str) -> None:
     # Импортируем миграцию динамически
     module = __import__(
         f"database.migrations.{migration_name}",
-        fromlist=["migrate_001_add_last_message_id"],
+        fromlist=["migrate"],
     )
 
+    # Получаем функцию миграции по имени
+    func_name = f"migrate_{migration_name}"
+    if not hasattr(module, func_name):
+        # Пробуем альтернативное имя функции
+        func_name = f"migrate_{migration_name.replace('00', '')}"
+
+    migrate_func = getattr(module, func_name)
+
     # Применяем миграцию
-    migrate_func = getattr(module, f"migrate_{migration_name.split('_')[0]}_add_last_message_id")
     await migrate_func(cursor)
 
     # Создаём таблицу migrations если не существует
