@@ -105,21 +105,11 @@ async def run_migrations(db) -> None:
         target_version = len(MIGRATIONS)
 
         if current_version >= target_version:
-<<<<<<< HEAD
             logger.info(f"База данных актуальна (версия схемы: v{current_version})")
             return
 
         logger.info(
             f"Применение миграций: с v{current_version} до v{target_version}",
-=======
-            logger.info("База данных актуальна (версия схемы: %d)", current_version)
-            return
-
-        logger.info(
-            "Применение миграций: с v%d до v%d",
-            current_version,
-            target_version,
->>>>>>> 02571aafde88a33b7b0848222a3f85bbed954070
         )
 
         # Применяем миграции по очереди
