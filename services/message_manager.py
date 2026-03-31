@@ -180,3 +180,76 @@ class MessageManager:
                 self.from_user = None
 
         return FakeMessage(chat_id, last_message_id, text)
+
+    async def send_or_edit_photo(
+        self,
+        bot: Bot,
+        user_id: int,
+        chat_id: int,
+        photo: str,
+        caption: str,
+        reply_markup=None,
+        parse_mode: str = "HTML",
+    ):
+        """
+        Отправить новое фото или отредактировать последнее сообщение с фото.
+
+        Args:
+            bot: Экземпляр бота
+            user_id: Telegram ID пользователя (для сохранения message_id)
+            chat_id: ID чата для отправки
+            photo: file_id фото или путь к файлу
+            caption: Подпись к фото
+            reply_markup: Inline-клавиатура (опционально).
+                          ReplyKeyboardMarkup не поддерживается при редактировании!
+            parse_mode: Режим парсинга (по умолчанию HTML)
+        """
+        last_message_id = await self.get_last_message_id(user_id)
+
+        if last_message_id:
+            # Пытаемся отредактировать существующее сообщение
+            try:
+                # При редактировании НЕ передаём reply_markup если это ReplyKeyboardMarkup
+                edit_kwargs = {
+                    "chat_id": chat_id,
+                    "message_id": last_message_id,
+                    "caption": caption,
+                    "parse_mode": parse_mode,
+                }
+
+                # Передаём reply_markup только если это inline-клавиатура
+                if reply_markup is not None:
+                    from aiogram.types import InlineKeyboardMarkup
+                    if isinstance(reply_markup, InlineKeyboardMarkup):
+                        edit_kwargs["reply_markup"] = reply_markup
+
+                await bot.edit_message_caption(**edit_kwargs)
+                # message_id не меняем при редактировании
+            except Exception as e:
+                # Если редактирование не удалось — сбрасываем last_message_id
+                # и отправляем новое сообщение
+                from logger import logger
+                logger.debug(f"Редактирование фото не удалось (msg {last_message_id}): {e}")
+
+                # Сбрасываем last_message_id чтобы следующее сообщение было новым
+                await self.clear_last_message_id(user_id)
+
+                # Отправляем новое фото
+                msg = await bot.send_photo(
+                    chat_id=chat_id,
+                    photo=photo,
+                    caption=caption,
+                    reply_markup=reply_markup,
+                    parse_mode=parse_mode,
+                )
+                await self.set_last_message_id(user_id, msg.message_id)
+        else:
+            # Отправляем новое фото
+            msg = await bot.send_photo(
+                chat_id=chat_id,
+                photo=photo,
+                caption=caption,
+                reply_markup=reply_markup,
+                parse_mode=parse_mode,
+            )
+            await self.set_last_message_id(user_id, msg.message_id)

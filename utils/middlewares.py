@@ -9,7 +9,7 @@ from aiogram.types import Message, CallbackQuery, TelegramObject
 from database import db, DB_TYPE
 from config import settings
 from services.subscription import SubscriptionService
-from services.content_manager import ContentManager, ButtonManager, ChannelManager, StatsManager
+from services.content_manager import ContentManager, ButtonManager, ChannelManager, StatsManager, PhotoManager
 from services.broadcaster import Broadcaster
 from services.message_manager import MessageManager
 from logger import logger
@@ -61,6 +61,7 @@ class ServiceMiddleware(BaseMiddleware):
         data["button_manager"] = ButtonManager(self.db)
         data["channel_manager"] = ChannelManager(self.db)
         data["stats_manager"] = StatsManager(self.db)
+        data["photo_manager"] = PhotoManager(self.db)
         data["broadcaster"] = Broadcaster(self.bot)
         data["message_manager"] = MessageManager()
 

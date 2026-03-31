@@ -19,10 +19,13 @@ from keyboards.admin import (
     get_buttons_list,
     get_buttons_edit_list,
     get_button_edit_menu,
+    get_photos_manage_menu,
+    get_photo_edit_menu,
+    get_back_to_photos_menu,
 )
 from keyboards.inline import get_view_result_button
 from keyboards.reply import get_main_menu
-from services.content_manager import ContentManager, ButtonManager, ChannelManager, StatsManager
+from services.content_manager import ContentManager, ButtonManager, ChannelManager, StatsManager, PhotoManager
 from services.broadcaster import Broadcaster
 from services.subscription import SubscriptionService
 from messages.texts import (
@@ -33,6 +36,8 @@ from messages.texts import (
     BROADCAST_TEXT,
     STATS_TEXT,
     CONFIRM_SAVE,
+    PHOTOS_MANAGE_TEXT,
+    PHOTO_EDIT_TEXT,
 )
 from utils.telegram_links import get_channel_id_from_link, parse_channel_input
 from logger import logger
@@ -524,6 +529,282 @@ async def delete_channel(message: Message, state: FSMContext, channel_manager: C
         await message.answer("❌ Канал не найден.")
 
     await state.clear()
+
+
+# ========== УПРАВЛЕНИЕ ФОТО ==========
+
+@router.callback_query(F.data == "admin_photos")
+async def admin_photos(callback: CallbackQuery, photo_manager: PhotoManager):
+    """
+    Меню управления фото.
+    """
+    keyboard = get_photos_manage_menu()
+    await callback.message.edit_text(text=PHOTOS_MANAGE_TEXT, reply_markup=keyboard, parse_mode="HTML")
+
+
+@router.callback_query(F.data == "photo_greeting")
+@router.callback_query(F.data == "photo_main_menu")
+async def photo_menu(callback: CallbackQuery, photo_manager: PhotoManager):
+    """
+    Меню редактирования конкретного фото.
+    """
+    try:
+        logger.debug(f"photo_menu: пользователь {callback.from_user.id}, callback_data={callback.data}")
+
+        # Извлекаем photo_type из callback_data
+        photo_type = callback.data.split("photo_", 1)[1]
+        logger.debug(f"photo_menu: извлечено photo_type={photo_type}")
+
+        if photo_type not in ["greeting", "main_menu"]:
+            logger.error(f"photo_menu: неверный тип фото '{photo_type}'")
+            await callback.answer("❌ Неверный тип фото", show_alert=True)
+            return
+
+        logger.debug(f"photo_menu: проверка наличия фото для photo_type={photo_type}")
+        has_photo = await photo_manager.has_photo(photo_type)
+        logger.debug(f"photo_menu: has_photo={has_photo}")
+
+        keyboard = get_photo_edit_menu(photo_type, has_photo)
+
+        status = "✅ Установлено" if has_photo else "❌ Не установлено"
+
+        # Извлекаем название фото без HTML-тегов
+        photo_label = PHOTO_EDIT_TEXT[photo_type].split('</b>')[0].split('<b>')[-1].replace('👋 ', '').replace('🏠 ', '').strip()
+
+        text = f"🖼 <b>Фото: {photo_label}</b>\n\n"
+        text += f"Статус: <b>{status}</b>\n\n"
+        text += "Выберите действие:"
+
+        await callback.message.edit_text(text=text, reply_markup=keyboard, parse_mode="HTML")
+        logger.info(f"photo_menu: меню отображено для photo_type={photo_type}")
+    except Exception as e:
+        logger.error(f"photo_menu: ошибка: {e}", exc_info=True)
+        await callback.answer("❌ Ошибка при отображении меню фото", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("photo_upload_"))
+async def photo_upload_start(callback: CallbackQuery, state: FSMContext):
+    """
+    Начало загрузки фото.
+    """
+    try:
+        logger.debug(f"photo_upload_start: пользователь {callback.from_user.id}, callback_data={callback.data}")
+
+        # Извлекаем photo_type - разбиваем по "_" и берём всё после "photo_upload_"
+        parts = callback.data.split("_")
+        logger.debug(f"photo_upload_start: части callback_data: {parts}")
+
+        # photo_upload_greeting -> ['photo', 'upload', 'greeting']
+        # photo_upload_main_menu -> ['photo', 'upload', 'main', 'menu']
+        if len(parts) < 3:
+            logger.error(f"photo_upload_start: неверный формат callback_data, частей: {len(parts)}")
+            await callback.answer("❌ Неверный формат кнопки", show_alert=True)
+            return
+
+        # Берём всё после "photo_upload_"
+        photo_type = "_".join(parts[2:])
+        logger.debug(f"photo_upload_start: извлечено photo_type={photo_type}")
+
+        if photo_type not in ["greeting", "main_menu"]:
+            logger.error(f"photo_upload_start: неверный тип фото '{photo_type}', разрешены: greeting, main_menu")
+            await callback.answer("❌ Неверный тип фото", show_alert=True)
+            return
+
+        # Устанавливаем состояние
+        await state.update_data(photo_type=photo_type)
+        logger.debug(f"photo_upload_start: состояние обновлено, photo_type={photo_type}")
+
+        if photo_type == "greeting":
+            await state.set_state(AdminStates.waiting_for_greeting_photo)
+            logger.debug(f"photo_upload_start: установлено состояние waiting_for_greeting_photo")
+        else:
+            await state.set_state(AdminStates.waiting_for_main_menu_photo)
+            logger.debug(f"photo_upload_start: установлено состояние waiting_for_main_menu_photo")
+
+        keyboard = get_back_to_photos_menu(photo_type)
+
+        await callback.message.edit_text(
+            text=PHOTO_EDIT_TEXT[photo_type],
+            reply_markup=keyboard,
+            parse_mode="HTML",
+        )
+        logger.info(f"photo_upload_start: меню загрузки фото '{photo_type}' отображено")
+    except Exception as e:
+        logger.error(f"photo_upload_start: ошибка: {e}", exc_info=True)
+        await callback.answer("❌ Ошибка при загрузке меню фото", show_alert=True)
+
+
+@router.message(AdminStates.waiting_for_greeting_photo, F.photo)
+@router.message(AdminStates.waiting_for_main_menu_photo, F.photo)
+async def save_photo(message: Message, state: FSMContext, photo_manager: PhotoManager):
+    """
+    Сохранение фото.
+    """
+    try:
+        logger.debug(f"save_photo: пользователь {message.from_user.id}, получено фото")
+
+        data = await state.get_data()
+        logger.debug(f"save_photo: данные состояния: {data}")
+
+        photo_type = data.get("photo_type")
+
+        if not photo_type:
+            logger.error("save_photo: тип фото не определён в состоянии")
+            await message.answer("❌ Ошибка: тип фото не определён")
+            await state.clear()
+            return
+
+        # Получаем file_id фото (берём фото наилучшего качества)
+        photo = message.photo[-1]
+        file_id = photo.file_id
+        file_unique_id = photo.file_unique_id
+        file_size = photo.file_size
+
+        logger.debug(f"save_photo: photo_type={photo_type}, file_id={file_id[:20]}..., "
+                     f"file_unique_id={file_unique_id}, file_size={file_size}")
+
+        # Сохраняем в БД
+        success = await photo_manager.set_photo(photo_type, file_id)
+        logger.debug(f"save_photo: результат сохранения: {success}")
+
+        if success:
+            logger.info(f"save_photo: фото '{photo_type}' успешно загружено пользователем {message.from_user.id}")
+            await message.answer(
+                f"✅ Фото успешно загружено!\n\n"
+                f"Теперь оно будет отображаться в боте.",
+                parse_mode="HTML",
+            )
+        else:
+            logger.error(f"save_photo: не удалось сохранить фото '{photo_type}'")
+            await message.answer("❌ Ошибка при сохранении фото. Попробуйте снова.")
+
+        await state.clear()
+
+    except Exception as e:
+        logger.error(f"save_photo: ошибка: {e}", exc_info=True)
+        await message.answer("❌ Произошла ошибка при загрузке фото.")
+        await state.clear()
+
+
+@router.message(AdminStates.waiting_for_greeting_photo)
+@router.message(AdminStates.waiting_for_main_menu_photo)
+async def invalid_photo_format(message: Message, state: FSMContext):
+    """
+    Обработка неверного формата фото (когда пользователь отправил текст вместо фото).
+    """
+    try:
+        logger.debug(f"invalid_photo_format: пользователь {message.from_user.id} отправил текст вместо фото. "
+                     f"Текст: {message.text[:100] if message.text else 'пусто'}")
+
+        data = await state.get_data()
+        photo_type = data.get("photo_type", "неизвестно")
+
+        logger.warning(f"invalid_photo_format: пользователь {message.from_user.id} отправил неверный формат "
+                       f"для photo_type={photo_type}")
+
+        await message.answer(
+            "❌ <b>Неверный формат!</b>\n\n"
+            "Пожалуйста, отправьте <b>фото</b> (изображение), а не текст.\n\n"
+            "Поддерживаемые форматы: JPG, PNG",
+            parse_mode="HTML",
+        )
+    except Exception as e:
+        logger.error(f"invalid_photo_format: ошибка: {e}", exc_info=True)
+
+
+@router.callback_query(F.data.startswith("photo_view_"))
+async def photo_view(callback: CallbackQuery, bot: Bot, photo_manager: PhotoManager):
+    """
+    Просмотр фото.
+    """
+    try:
+        logger.debug(f"photo_view: пользователь {callback.from_user.id}, callback_data={callback.data}")
+
+        # Извлекаем photo_type
+        parts = callback.data.split("_")
+        if len(parts) < 3:
+            logger.error(f"photo_view: неверный формат callback_data")
+            await callback.answer("❌ Неверный формат кнопки", show_alert=True)
+            return
+
+        photo_type = "_".join(parts[2:])
+        logger.debug(f"photo_view: извлечено photo_type={photo_type}")
+
+        if photo_type not in ["greeting", "main_menu"]:
+            logger.error(f"photo_view: неверный тип фото '{photo_type}'")
+            await callback.answer("❌ Неверный тип фото", show_alert=True)
+            return
+
+        file_id = await photo_manager.get_photo(photo_type)
+        logger.debug(f"photo_view: file_id={file_id[:20] if file_id else None}...")
+
+        if not file_id:
+            logger.warning(f"photo_view: фото не найдено photo_type={photo_type}")
+            await callback.answer("❌ Фото не найдено", show_alert=True)
+            return
+
+        # Отправляем фото
+        await bot.send_photo(
+            chat_id=callback.from_user.id,
+            photo=file_id,
+            caption=f"🖼 <b>Просмотр фото: {photo_type}</b>",
+            parse_mode="HTML",
+        )
+
+        logger.info(f"photo_view: фото отправлено пользователю {callback.from_user.id}")
+        await callback.answer("✅ Фото отправлено в чат")
+    except Exception as e:
+        logger.error(f"photo_view: ошибка: {e}", exc_info=True)
+        await callback.answer("❌ Ошибка при просмотре фото", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("photo_delete_"))
+async def photo_delete_confirm(callback: CallbackQuery, photo_manager: PhotoManager):
+    """
+    Подтверждение удаления фото.
+    """
+    try:
+        logger.debug(f"photo_delete_confirm: пользователь {callback.from_user.id}, callback_data={callback.data}")
+
+        # Извлекаем photo_type
+        parts = callback.data.split("_")
+        if len(parts) < 3:
+            logger.error(f"photo_delete_confirm: неверный формат callback_data")
+            await callback.answer("❌ Неверный формат кнопки", show_alert=True)
+            return
+
+        photo_type = "_".join(parts[2:])
+        logger.debug(f"photo_delete_confirm: извлечено photo_type={photo_type}")
+
+        if photo_type not in ["greeting", "main_menu"]:
+            logger.error(f"photo_delete_confirm: неверный тип фото '{photo_type}'")
+            await callback.answer("❌ Неверный тип фото", show_alert=True)
+            return
+
+        # Удаляем фото
+        success = await photo_manager.delete_photo(photo_type)
+        logger.debug(f"photo_delete_confirm: результат удаления: {success}")
+
+        if success:
+            # Обновляем меню
+            keyboard = get_photo_edit_menu(photo_type, False)
+
+            # Извлекаем название фото без HTML-тегов
+            photo_label = PHOTO_EDIT_TEXT[photo_type].split('</b>')[0].split('<b>')[-1].replace('👋 ', '').replace('🏠 ', '').strip()
+
+            text = f"🖼 <b>Фото: {photo_label}</b>\n\n"
+            text += f"Статус: ❌ Не установлено\n\n"
+            text += "Выберите действие:"
+
+            await callback.message.edit_text(text=text, reply_markup=keyboard, parse_mode="HTML")
+            logger.info(f"photo_delete_confirm: фото '{photo_type}' удалено")
+            await callback.answer("✅ Фото удалено")
+        else:
+            logger.warning(f"photo_delete_confirm: фото не найдено для удаления photo_type={photo_type}")
+            await callback.answer("❌ Ошибка при удалении фото", show_alert=True)
+    except Exception as e:
+        logger.error(f"photo_delete_confirm: ошибка: {e}", exc_info=True)
+        await callback.answer("❌ Ошибка при удалении фото", show_alert=True)
 
 
 # ========== СТАТИСТИКА ==========

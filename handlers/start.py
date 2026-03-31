@@ -11,7 +11,7 @@ from keyboards.inline import get_channel_buttons
 from keyboards.reply import get_main_menu
 from services.subscription import SubscriptionService
 from services.message_manager import MessageManager
-from services.content_manager import ContentManager
+from services.content_manager import ContentManager, PhotoManager
 from messages.texts import SUBSCRIPTION_REQUIRED, SUBSCRIPTION_DENIED
 from logger import logger
 
@@ -26,6 +26,7 @@ async def cmd_start(
     subscription_service: SubscriptionService,
     message_manager: MessageManager,
     content_manager: ContentManager,
+    photo_manager: PhotoManager,
 ):
     """
     Обработчик команды /start.
@@ -46,7 +47,7 @@ async def cmd_start(
 
     if is_subscribed:
         # Пользователь подписан — показываем меню
-        await _show_main_menu(message, db, bot, message_manager, user_id, chat_id, content_manager)
+        await _show_main_menu(message, db, bot, message_manager, user_id, chat_id, content_manager, photo_manager)
     else:
         # Не подписан — требуем подписку
         channels = subscription_service.channel_ids
@@ -58,7 +59,7 @@ async def cmd_start(
 
         # Сбрасываем last_message_id чтобы всегда отправлять новое сообщение
         await message_manager.clear_last_message_id(user_id)
-        
+
         # Отправляем новое сообщение с кнопками подписки
         msg = await bot.send_message(
             chat_id=chat_id,
@@ -68,7 +69,7 @@ async def cmd_start(
         )
         # Сохраняем message_id чтобы потом редактировать
         await message_manager.set_last_message_id(user_id, msg.message_id)
-        
+
         logger.info(f"Пользователь {user_id} должен подписаться на каналы")
 
 
@@ -80,6 +81,7 @@ async def check_subscription(
     subscription_service: SubscriptionService,
     message_manager: MessageManager,
     content_manager: ContentManager,
+    photo_manager: PhotoManager,
 ):
     """
     Проверка подписки после нажатия кнопки "✅ Я подписался".
@@ -93,7 +95,7 @@ async def check_subscription(
         await callback.message.delete()
         # Очищаем last_message_id чтобы следующее сообщение было новым
         await message_manager.clear_last_message_id(user_id)
-        await _show_main_menu(callback.message, db, bot, message_manager, user_id, callback.message.chat.id, content_manager)
+        await _show_main_menu(callback.message, db, bot, message_manager, user_id, callback.message.chat.id, content_manager, photo_manager)
         logger.info(f"Пользователь {user_id} подписался на каналы")
     else:
         # Всё ещё не подписан — обновляем ссылки (вдруг истекли)
@@ -148,6 +150,7 @@ async def _show_main_menu(
     user_id: int,
     chat_id: int,
     content_manager: ContentManager = None,
+    photo_manager: PhotoManager = None,
 ) -> None:
     """
     Показать главное меню пользователю.
@@ -160,6 +163,7 @@ async def _show_main_menu(
         user_id: Telegram ID пользователя
         chat_id: ID чата
         content_manager: Менеджер контента (опционально)
+        photo_manager: Менеджер фото (опционально)
     """
     keyboard = await get_main_menu(db)
 
@@ -168,6 +172,24 @@ async def _show_main_menu(
     if not greeting_text:
         greeting_text = "👋 <b>Привет! Я бот-визитка разработчика.</b>\n\nВыберите раздел в меню ниже, чтобы узнать больше обо мне и моих услугах."
 
+    # Проверяем наличие фото приветствия
+    if photo_manager:
+        greeting_photo_id = await photo_manager.get_photo("greeting")
+        
+        if greeting_photo_id:
+            # Отправляем фото с текстом и клавиатурой
+            await message_manager.send_or_edit_photo(
+                bot=bot,
+                user_id=user_id,
+                chat_id=chat_id,
+                photo=greeting_photo_id,
+                caption=greeting_text,
+                reply_markup=keyboard,
+                parse_mode="HTML",
+            )
+            return
+
+    # Если фото нет — отправляем текст
     await message_manager.send_or_edit(
         bot=bot,
         user_id=user_id,

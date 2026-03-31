@@ -350,3 +350,159 @@ class StatsManager:
         """
         row = await self.db.fetchone("SELECT COUNT(*) FROM users")
         return row[0] if row else 0
+
+
+class PhotoManager:
+    """
+    Сервис для управления фото (приветствие и главное меню).
+    """
+
+    def __init__(self, db):
+        self.db = db_adapter
+
+    async def get_photo(self, photo_type: str) -> str | None:
+        """
+        Получить file_id фото по типу.
+
+        Args:
+            photo_type: Тип фото ('greeting' или 'main_menu')
+
+        Returns:
+            file_id фото или None если не найдено
+        """
+        try:
+            # Формируем ключ кэша
+            cache_key = f"photo:get_photo:{photo_type}"
+            logger.debug(f"PhotoManager.get_photo: запрос photo_type={photo_type}")
+
+            # Проверяем кэш
+            from utils.cache import cache as cache_service
+            cached_result = await cache_service.get(cache_key)
+            if cached_result is not None:
+                logger.debug(f"PhotoManager.get_photo: найдено в кэше photo_type={photo_type}, file_id={cached_result[:20]}...")
+                return cached_result
+
+            # Получаем из БД
+            row = await self.db.fetchone(
+                "SELECT file_id FROM photos WHERE photo_type = ?",
+                photo_type,
+            )
+            result = row[0] if row else None
+
+            if result:
+                logger.debug(f"PhotoManager.get_photo: получено из БД photo_type={photo_type}, file_id={result[:20]}...")
+                # Сохраняем в кэш на 300 секунд
+                await cache_service.set(cache_key, result, 300)
+                logger.debug(f"PhotoManager.get_photo: сохранено в кэш photo_type={photo_type} (TTL: 300s)")
+            else:
+                logger.debug(f"PhotoManager.get_photo: фото не найдено photo_type={photo_type}")
+
+            return result
+        except Exception as e:
+            logger.error(f"PhotoManager.get_photo: ошибка при получении фото {photo_type}: {e}", exc_info=True)
+            return None
+
+    async def set_photo(self, photo_type: str, file_id: str) -> bool:
+        """
+        Установить фото (добавить или обновить).
+
+        Args:
+            photo_type: Тип фото ('greeting' или 'main_menu')
+            file_id: Telegram file_id фото
+
+        Returns:
+            True если успешно
+        """
+        try:
+            logger.debug(f"PhotoManager.set_photo: запрос на сохранение photo_type={photo_type}, file_id={file_id[:20]}...")
+
+            # Для PostgreSQL используем ON CONFLICT
+            if db_adapter.db_type == "postgresql":
+                success = await self.db.execute(
+                    """
+                    INSERT INTO photos (photo_type, file_id) VALUES (?, ?)
+                    ON CONFLICT (photo_type) DO UPDATE SET file_id = ?, updated_at = CURRENT_TIMESTAMP
+                    """,
+                    photo_type, file_id, file_id,
+                )
+            else:
+                success = await self.db.execute(
+                    """
+                    INSERT OR REPLACE INTO photos (photo_type, file_id, updated_at)
+                    VALUES (?, ?, CURRENT_TIMESTAMP)
+                    """,
+                    photo_type, file_id,
+                )
+
+            if success:
+                # Очищаем кэш для этого типа фото
+                cache_key = f"photo:get_photo:{photo_type}"
+                from utils.cache import cache as cache_service
+                await cache_service.delete(cache_key)
+                logger.debug(f"PhotoManager.set_photo: кэш очищен для photo_type={photo_type}")
+
+                logger.info(f"PhotoManager.set_photo: фото '{photo_type}' установлено (file_id: {file_id[:20]}...)")
+                return True
+            else:
+                logger.warning(f"PhotoManager.set_photo: запрос не выполнился photo_type={photo_type}")
+                return False
+        except Exception as e:
+            logger.error(f"PhotoManager.set_photo: ошибка при сохранении фото {photo_type}: {e}", exc_info=True)
+            return False
+
+    async def delete_photo(self, photo_type: str) -> bool:
+        """
+        Удалить фото.
+
+        Args:
+            photo_type: Тип фото ('greeting' или 'main_menu')
+
+        Returns:
+            True если успешно
+        """
+        try:
+            logger.debug(f"PhotoManager.delete_photo: запрос на удаление photo_type={photo_type}")
+
+            success = await self.db.execute(
+                "DELETE FROM photos WHERE photo_type = ?",
+                photo_type,
+            )
+            if success:
+                # Очищаем кэш
+                cache_key = f"photo:get_photo:{photo_type}"
+                from utils.cache import cache as cache_service
+                await cache_service.delete(cache_key)
+                logger.debug(f"PhotoManager.delete_photo: кэш очищен для photo_type={photo_type}")
+
+                logger.info(f"PhotoManager.delete_photo: фото '{photo_type}' удалено")
+                return True
+            else:
+                logger.warning(f"PhotoManager.delete_photo: фото не найдено для удаления photo_type={photo_type}")
+                return False
+        except Exception as e:
+            logger.error(f"PhotoManager.delete_photo: ошибка при удалении фото {photo_type}: {e}", exc_info=True)
+            return False
+
+    async def has_photo(self, photo_type: str) -> bool:
+        """
+        Проверить наличие фото.
+
+        Args:
+            photo_type: Тип фото
+
+        Returns:
+            True если фото существует
+        """
+        try:
+            logger.debug(f"PhotoManager.has_photo: проверка наличия photo_type={photo_type}")
+
+            row = await self.db.fetchone(
+                "SELECT 1 FROM photos WHERE photo_type = ?",
+                photo_type,
+            )
+            result = row is not None
+            logger.debug(f"PhotoManager.has_photo: photo_type={photo_type} -> {'найдено' if result else 'не найдено'}")
+            return result
+        except Exception as e:
+            logger.error(f"PhotoManager.has_photo: ошибка при проверке фото {photo_type}: {e}", exc_info=True)
+            return False

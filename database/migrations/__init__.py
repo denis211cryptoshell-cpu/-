@@ -21,6 +21,10 @@ MIGRATIONS = [
         "name": "003_add_last_section",
         "description": "Добавление колонки last_section в таблицу users для защиты от дублирования",
     },
+    {
+        "name": "004_add_photos_table",
+        "description": "Добавление таблицы photos для хранения фото (приветствие и главное меню)",
+    },
 ]
 
 

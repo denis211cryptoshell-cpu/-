@@ -7,7 +7,7 @@ from aiogram import Router, F, Bot
 from aiogram.types import Message
 
 from database import db_adapter
-from services.content_manager import ContentManager, StatsManager
+from services.content_manager import ContentManager, StatsManager, PhotoManager
 from services.message_manager import MessageManager
 from logger import logger
 
@@ -27,6 +27,7 @@ async def handle_menu_button(
     content_manager: ContentManager,
     stats_manager: StatsManager,
     message_manager: MessageManager,
+    photo_manager: PhotoManager,
 ):
     """
     Обработка нажатий на кнопки главного меню.
@@ -87,14 +88,30 @@ async def handle_menu_button(
         # Сохраняем текущий раздел
         await message_manager.set_last_section(user_id, section_key)
 
-        await message_manager.send_or_edit(
-            bot=bot,
-            user_id=user_id,
-            chat_id=chat_id,
-            text=content,
-            reply_markup=None,  # Клавиатура остаётся той же (reply keyboard)
-            parse_mode="HTML",
-        )
+        # Проверяем наличие фото главного меню
+        main_menu_photo_id = await photo_manager.get_photo("main_menu")
+        
+        if main_menu_photo_id:
+            # Отправляем фото с текстом и caption
+            await message_manager.send_or_edit_photo(
+                bot=bot,
+                user_id=user_id,
+                chat_id=chat_id,
+                photo=main_menu_photo_id,
+                caption=content,
+                reply_markup=None,  # Клавиатура остаётся той же (reply keyboard)
+                parse_mode="HTML",
+            )
+        else:
+            # Если фото нет — отправляем текст
+            await message_manager.send_or_edit(
+                bot=bot,
+                user_id=user_id,
+                chat_id=chat_id,
+                text=content,
+                reply_markup=None,
+                parse_mode="HTML",
+            )
         logger.debug(f"Пользователь {user_id} открыл раздел {section_key}")
     else:
         await message_manager.send_or_edit(

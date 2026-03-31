@@ -15,3 +15,7 @@ class AdminStates(StatesGroup):
     waiting_for_channel_remove = State()  # Ожидание канала для удаления
     waiting_for_broadcast = State()  # Ожидание текста рассылки
     processing_invite_link = State()  # Обработка пригласительной ссылки
+    
+    # Состояния для управления фото
+    waiting_for_greeting_photo = State()  # Ожидание фото для приветствия
+    waiting_for_main_menu_photo = State()  # Ожидание фото для главного меню

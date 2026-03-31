@@ -8,7 +8,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 def get_admin_panel() -> InlineKeyboardMarkup:
     """
     Главное меню админ-панели.
-    
+
     Returns:
         InlineKeyboardMarkup с основными разделами админки
     """
@@ -22,6 +22,7 @@ def get_admin_panel() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats"),
         ],
         [
+            InlineKeyboardButton(text="🖼 Фото", callback_data="admin_photos"),
             InlineKeyboardButton(text="📨 Рассылка", callback_data="admin_broadcast"),
         ],
         [
@@ -225,3 +226,63 @@ def get_buttons_list(buttons: list[tuple]) -> InlineKeyboardMarkup:
     keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data="admin_main")])
 
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
+def get_photos_manage_menu() -> InlineKeyboardMarkup:
+    """
+    Меню управления фото.
+
+    Returns:
+        InlineKeyboardMarkup с опциями управления фото
+    """
+    keyboard = [
+        [InlineKeyboardButton(text="👋 Фото приветствия", callback_data="photo_greeting")],
+        [InlineKeyboardButton(text="🏠 Фото главного меню", callback_data="photo_main_menu")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="admin_main")],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
+def get_photo_edit_menu(photo_type: str, has_photo: bool) -> InlineKeyboardMarkup:
+    """
+    Меню редактирования конкретного фото.
+
+    Args:
+        photo_type: Тип фото ('greeting' или 'main_menu')
+        has_photo: Есть ли уже фото
+
+    Returns:
+        InlineKeyboardMarkup с кнопками управления
+    """
+    photo_label = "Приветствие" if photo_type == "greeting" else "Главное меню"
+    
+    keyboard = [
+        [InlineKeyboardButton(text="📸 Загрузить фото", callback_data=f"photo_upload_{photo_type}")],
+    ]
+    
+    if has_photo:
+        keyboard.append(
+            [InlineKeyboardButton(text="👁️ Просмотреть", callback_data=f"photo_view_{photo_type}")]
+        )
+        keyboard.append(
+            [InlineKeyboardButton(text="🗑️ Удалить фото", callback_data=f"photo_delete_{photo_type}")]
+        )
+    
+    keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data="admin_photos")])
+    
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
+def get_back_to_photos_menu(photo_type: str) -> InlineKeyboardMarkup:
+    """
+    Кнопка возврата к меню управления фото.
+
+    Args:
+        photo_type: Тип фото
+
+    Returns:
+        InlineKeyboardMarkup с кнопкой назад
+    """
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="admin_photos")]
+    ])

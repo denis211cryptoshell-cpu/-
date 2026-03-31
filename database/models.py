@@ -45,11 +45,20 @@ CREATE TABLE IF NOT EXISTS stats (
     UNIQUE(button_name)
 );
 
+-- Таблица фото (приветствие и главное меню)
+CREATE TABLE IF NOT EXISTS photos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    photo_type TEXT UNIQUE NOT NULL,
+    file_id TEXT NOT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Индексы для ускорения
 CREATE INDEX IF NOT EXISTS idx_users_telegram ON users(telegram_id);
 CREATE INDEX IF NOT EXISTS idx_content_section ON content(section);
 CREATE INDEX IF NOT EXISTS idx_buttons_active ON buttons(is_active);
 CREATE INDEX IF NOT EXISTS idx_channels_required ON channels(is_required);
+CREATE INDEX IF NOT EXISTS idx_photos_type ON photos(photo_type);
 """
 
 # SQL-скрипт создания таблиц (PostgreSQL)
@@ -94,11 +103,20 @@ CREATE TABLE IF NOT EXISTS stats (
     UNIQUE(button_name)
 );
 
+-- Таблица фото (приветствие и главное меню)
+CREATE TABLE IF NOT EXISTS photos (
+    id SERIAL PRIMARY KEY,
+    photo_type TEXT UNIQUE NOT NULL,
+    file_id TEXT NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Индексы для ускорения
 CREATE INDEX IF NOT EXISTS idx_users_telegram ON users(telegram_id);
 CREATE INDEX IF NOT EXISTS idx_content_section ON content(section);
 CREATE INDEX IF NOT EXISTS idx_buttons_active ON buttons(is_active);
 CREATE INDEX IF NOT EXISTS idx_channels_required ON channels(is_required);
+CREATE INDEX IF NOT EXISTS idx_photos_type ON photos(photo_type);
 """
 
 # SQL-скрипт заполнения дефолтными данными (SQLite)
