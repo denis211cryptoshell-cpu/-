@@ -111,7 +111,7 @@ class MessageManager:
             bot: Экземпляр бота
             user_id: Telegram ID пользователя (для сохранения message_id)
             chat_id: ID чата для отправки
-            text: Текст сообщения
+            text: Текст сообщения (будет обрезан до 4096 символов)
             reply_markup: Inline-клавиатура (опционально).
                           ReplyKeyboardMarkup не поддерживается при редактировании!
             parse_mode: Режим парсинга (по умолчанию HTML)
@@ -119,6 +119,17 @@ class MessageManager:
         Returns:
             Отправленное/отредактированное сообщение
         """
+        # Telegram ограничивает сообщения 4096 символами
+        MAX_MESSAGE_LENGTH = 4096
+        
+        if len(text) > MAX_MESSAGE_LENGTH:
+            from logger import logger
+            logger.warning(
+                f"Текст сообщения слишком длинный ({len(text)} символов), обрезано до {MAX_MESSAGE_LENGTH}"
+            )
+            # Обрезаем с многоточием
+            text = text[:MAX_MESSAGE_LENGTH - 3] + "..."
+
         last_message_id = await self.get_last_message_id(user_id)
 
         if last_message_id:
@@ -199,11 +210,22 @@ class MessageManager:
             user_id: Telegram ID пользователя (для сохранения message_id)
             chat_id: ID чата для отправки
             photo: file_id фото или путь к файлу
-            caption: Подпись к фото
+            caption: Подпись к фото (будет обрезана до 1024 символов)
             reply_markup: Inline-клавиатура (опционально).
                           ReplyKeyboardMarkup не поддерживается при редактировании!
             parse_mode: Режим парсинга (по умолчанию HTML)
         """
+        # Telegram ограничивает caption 1024 символами
+        MAX_CAPTION_LENGTH = 1024
+        
+        if len(caption) > MAX_CAPTION_LENGTH:
+            from logger import logger
+            logger.warning(
+                f"Caption слишком длинный ({len(caption)} символов), обрезано до {MAX_CAPTION_LENGTH}"
+            )
+            # Обрезаем с многоточием
+            caption = caption[:MAX_CAPTION_LENGTH - 3] + "..."
+
         last_message_id = await self.get_last_message_id(user_id)
 
         if last_message_id:
