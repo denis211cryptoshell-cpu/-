@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  # Telegram Bot
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: telegram-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - bot_data:/app/data
+      - bot_logs:/app/logs
+      - bot_backups:/app/data/backups
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - bot-network
+    command: python main.py
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: bot-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    networks:
+      - bot-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: redis-server --appendonly yes
+
+networks:
+  bot-network:
+    driver: bridge
+
+volumes:
+  bot_data:
+    name: telegram-bot-data
+  bot_logs:
+    name: telegram-bot-logs
+  bot_backups:
+    name: telegram-bot-backups
+  redis_data:
+    name: bot-redis-data
