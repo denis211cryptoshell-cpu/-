@@ -23,11 +23,19 @@ async def migrate_005_add_last_seen_stats(cursor: Cursor) -> None:
         logger.info("Добавлена колонка button_label в таблицу stats")
     
     # Добавляем колонку last_clicked если не существует
+    # SQLite требует constant default, поэтому добавляем без default
     if 'last_clicked' not in column_names:
         await cursor.execute("""
-            ALTER TABLE stats ADD COLUMN last_clicked DATETIME DEFAULT CURRENT_TIMESTAMP
+            ALTER TABLE stats ADD COLUMN last_clicked DATETIME
         """)
         logger.info("Добавлена колонка last_clicked в таблицу stats")
+    
+    # Обновляем last_clicked для старых записей
+    await cursor.execute("""
+        UPDATE stats 
+        SET last_clicked = CURRENT_TIMESTAMP 
+        WHERE last_clicked IS NULL
+    """)
     
     # Обновляем button_label из таблицы buttons
     await cursor.execute("""
@@ -38,4 +46,4 @@ async def migrate_005_add_last_seen_stats(cursor: Cursor) -> None:
         WHERE button_label = '' OR button_label IS NULL
     """)
     
-    logger.info("Обновлены button_label из таблицы buttons")
+    logger.info("Обновлены button_label и last_clicked из таблицы buttons")
