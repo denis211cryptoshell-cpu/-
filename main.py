@@ -18,6 +18,7 @@ from utils import DatabaseMiddleware, ServiceMiddleware, AdminMiddleware
 from utils.rate_limiter import RateLimitMiddleware
 from utils.scheduler import scheduler_service
 from utils.delete_message_middleware import DeleteUserMessageMiddleware
+from utils.cache import init_cache
 from services.backup import backup_service
 
 
@@ -37,6 +38,12 @@ async def main():
 
     # Инициализация диспетчера
     dp = Dispatcher()
+
+    # Инициализация кэша
+    if settings.cache_backend == "redis" and settings.redis_url:
+        init_cache(backend="redis", redis_url=settings.redis_url)
+    else:
+        init_cache(backend="local")
 
     # Подключение middleware
     # DeleteUserMessageMiddleware должен быть ПЕРВЫМ для dp.message — чтобы удалять все сообщения
@@ -97,6 +104,14 @@ async def main():
         if DB_TYPE == "sqlite":
             scheduler_service.stop()
         await db.disconnect()
+        
+        # Отключение Redis (если используется)
+        if settings.cache_backend == "redis":
+            from utils.cache import get_cache
+            cache_backend = get_cache()
+            if hasattr(cache_backend, 'disconnect') and cache_backend._connected:
+                await cache_backend.disconnect()
+        
         await bot.session.close()
         logger.info("Бот остановлен")
 

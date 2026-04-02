@@ -39,12 +39,37 @@ class ServiceMiddleware(BaseMiddleware):
     """
     Middleware для внедрения сервисов в хендлеры.
 
-    Добавляет сервисы в словарь data каждого события.
+    Создаёт сервисы один раз при инициализации и переиспользует их.
     """
 
     def __init__(self, db, bot):
         self.db = db
         self.bot = bot
+        # Создаём сервисы один раз
+        self._subscription_service = None
+        self._content_manager = None
+        self._button_manager = None
+        self._channel_manager = None
+        self._stats_manager = None
+        self._photo_manager = None
+        self._broadcaster = None
+        self._message_manager = None
+
+    async def _init_services(self):
+        """Ленивая инициализация сервисов."""
+        if self._subscription_service is None:
+            # Получаем каналы из БД
+            channel_ids = await self._get_channel_ids_from_db()
+            
+            # Создаём сервисы
+            self._subscription_service = SubscriptionService(self.bot, channel_ids)
+            self._content_manager = ContentManager(self.db)
+            self._button_manager = ButtonManager(self.db)
+            self._channel_manager = ChannelManager(self.db)
+            self._stats_manager = StatsManager(self.db)
+            self._photo_manager = PhotoManager(self.db)
+            self._broadcaster = Broadcaster(self.bot)
+            self._message_manager = MessageManager()
 
     async def __call__(
         self,
@@ -52,18 +77,18 @@ class ServiceMiddleware(BaseMiddleware):
         event: TelegramObject,
         data: Dict[str, Any],
     ) -> Any:
-        # Получаем каналы из БД (а не из .env!)
-        channel_ids = await self._get_channel_ids_from_db()
+        # Инициализируем сервисы при первом вызове
+        await self._init_services()
 
         # Внедряем сервисы
-        data["subscription_service"] = SubscriptionService(self.bot, channel_ids)
-        data["content_manager"] = ContentManager(self.db)
-        data["button_manager"] = ButtonManager(self.db)
-        data["channel_manager"] = ChannelManager(self.db)
-        data["stats_manager"] = StatsManager(self.db)
-        data["photo_manager"] = PhotoManager(self.db)
-        data["broadcaster"] = Broadcaster(self.bot)
-        data["message_manager"] = MessageManager()
+        data["subscription_service"] = self._subscription_service
+        data["content_manager"] = self._content_manager
+        data["button_manager"] = self._button_manager
+        data["channel_manager"] = self._channel_manager
+        data["stats_manager"] = self._stats_manager
+        data["photo_manager"] = self._photo_manager
+        data["broadcaster"] = self._broadcaster
+        data["message_manager"] = self._message_manager
 
         return await handler(event, data)
     

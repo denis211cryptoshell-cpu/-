@@ -918,7 +918,7 @@ async def cmd_cache(message: Message):
     if not settings.is_admin(message.from_user.id):
         return
 
-    from utils.cache import get_cache_stats, cache
+    from utils.cache import get_cache_stats, get_cache
 
     args = message.text.split(maxsplit=1)
     command = args[1] if len(args) > 1 else "stats"
@@ -930,7 +930,8 @@ async def cmd_cache(message: Message):
 
     elif command == "clear":
         # Очистить весь кэш
-        await cache.clear()
+        cache_backend = get_cache()
+        await cache_backend.clear()
         await message.answer("🧹 Кэш полностью очищен")
 
     else:

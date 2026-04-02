@@ -60,8 +60,9 @@ class ContentManager:
         cache_key = f"content:get_content:{section}"
 
         # Проверяем кэш
-        from utils.cache import cache as cache_service
-        cached_result = await cache_service.get(cache_key)
+        from utils.cache import get_cache
+        cache_backend = get_cache()
+        cached_result = await cache_backend.get(cache_key)
         if cached_result is not None:
             logger.debug(f"Кэш: get_content({section}) -> {cached_result[:50]}...")
             return cached_result
@@ -75,7 +76,7 @@ class ContentManager:
 
         # Сохраняем в кэш на 300 секунд
         if result is not None:
-            await cache_service.set(cache_key, result, 300)
+            await cache_backend.set(cache_key, result, 300)
             logger.debug(f"Кэш: get_content({section}) -> кэшировано (TTL: 300s)")
 
         return result
@@ -113,8 +114,9 @@ class ContentManager:
             if success:
                 # Очищаем кэш для этого раздела
                 cache_key = f"content:get_content:{section}"
-                from utils.cache import cache as cache_service
-                await cache_service.delete(cache_key)
+                from utils.cache import get_cache
+                cache_backend = get_cache()
+                await cache_backend.delete(cache_key)
 
                 logger.info(f"Контент раздела '{section}' обновлён")
                 return True
@@ -376,8 +378,9 @@ class PhotoManager:
             logger.debug(f"PhotoManager.get_photo: запрос photo_type={photo_type}")
 
             # Проверяем кэш
-            from utils.cache import cache as cache_service
-            cached_result = await cache_service.get(cache_key)
+            from utils.cache import get_cache
+            cache_backend = get_cache()
+            cached_result = await cache_backend.get(cache_key)
             if cached_result is not None:
                 logger.debug(f"PhotoManager.get_photo: найдено в кэше photo_type={photo_type}, file_id={cached_result[:20]}...")
                 return cached_result
@@ -392,7 +395,7 @@ class PhotoManager:
             if result:
                 logger.debug(f"PhotoManager.get_photo: получено из БД photo_type={photo_type}, file_id={result[:20]}...")
                 # Сохраняем в кэш на 300 секунд
-                await cache_service.set(cache_key, result, 300)
+                await cache_backend.set(cache_key, result, 300)
                 logger.debug(f"PhotoManager.get_photo: сохранено в кэш photo_type={photo_type} (TTL: 300s)")
             else:
                 logger.debug(f"PhotoManager.get_photo: фото не найдено photo_type={photo_type}")
@@ -437,8 +440,9 @@ class PhotoManager:
             if success:
                 # Очищаем кэш для этого типа фото
                 cache_key = f"photo:get_photo:{photo_type}"
-                from utils.cache import cache as cache_service
-                await cache_service.delete(cache_key)
+                from utils.cache import get_cache
+                cache_backend = get_cache()
+                await cache_backend.delete(cache_key)
                 logger.debug(f"PhotoManager.set_photo: кэш очищен для photo_type={photo_type}")
 
                 logger.info(f"PhotoManager.set_photo: фото '{photo_type}' установлено (file_id: {file_id[:20]}...)")
@@ -470,8 +474,9 @@ class PhotoManager:
             if success:
                 # Очищаем кэш
                 cache_key = f"photo:get_photo:{photo_type}"
-                from utils.cache import cache as cache_service
-                await cache_service.delete(cache_key)
+                from utils.cache import get_cache
+                cache_backend = get_cache()
+                await cache_backend.delete(cache_key)
                 logger.debug(f"PhotoManager.delete_photo: кэш очищен для photo_type={photo_type}")
 
                 logger.info(f"PhotoManager.delete_photo: фото '{photo_type}' удалено")

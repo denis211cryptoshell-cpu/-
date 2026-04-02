@@ -1,14 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python *)",
-      "Bash(pip install *)",
-      "Bash(mkdir *)",
-      "Bash(taskkill *)",
-      "Bash(git add *)",
-      "Bash(git commit *)",
-      "Bash(git push *)"
+      "Bash(git checkout *)"
     ]
-  },
-  "$version": 3
+  }
 }

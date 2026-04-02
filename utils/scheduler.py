@@ -61,9 +61,10 @@ class SchedulerService:
         """
         Задача очистки просроченного кэша.
         """
-        from utils.cache import cache
-        
-        deleted = await cache.cleanup_expired()
+        from utils.cache import get_cache
+
+        cache_backend = get_cache()
+        deleted = await cache_backend.cleanup_expired()
         if deleted > 0:
             logger.info(f"🧹 Очистка кэша: удалено {deleted} записей")
 

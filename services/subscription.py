@@ -59,33 +59,45 @@ class SubscriptionService:
         Returns:
             True если подписан, иначе False
         """
+        import time
+        
         # Формируем ключ кэша
         cache_key = f"subscription:_check_channel:{user_id}:{channel_id}"
 
         # Проверяем кэш
-        from utils.cache import cache as cache_service
-        cached_result = await cache_service.get(cache_key)
+        from utils.cache import get_cache
+        cache_backend = get_cache()
+        cached_result = await cache_backend.get(cache_key)
         if cached_result is not None:
-            logger.debug(f"Кэш: _check_channel -> {cached_result}")
+            logger.debug(f"✅ Кэш: _check_channel({channel_id}) -> {cached_result}")
             return cached_result
 
+        # Замеряем время запроса к Telegram API
+        start_time = time.time()
+        logger.debug(f"⏳ Запрос к Telegram API: check_channel({channel_id})...")
+        
         try:
             member = await self.bot.get_chat_member(chat_id=channel_id, user_id=user_id)
             # Проверяем статусы членства
             result = member.status in ("member", "administrator", "creator")
+            
+            elapsed = time.time() - start_time
+            logger.debug(f"✅ Telegram API ответило за {elapsed:.2f}s: {result}")
 
             # Сохраняем в кэш на 60 секунд
-            await cache_service.set(cache_key, result, 60)
-            logger.debug(f"Кэш: _check_channel -> {result} (TTL: 60s)")
+            await cache_backend.set(cache_key, result, 60)
+            logger.debug(f"💾 Кэш: _check_channel -> {result} (TTL: 60s)")
             return result
 
         except TelegramBadRequest as e:
             # Бот не админ в канале или канал недоступен
-            logger.error(f"Ошибка проверки канала {channel_id}: {e}")
+            elapsed = time.time() - start_time
+            logger.error(f"❌ Ошибка проверки канала {channel_id} за {elapsed:.2f}s: {e}")
             return False
 
         except Exception as e:
-            logger.error(f"Неожиданная ошибка при проверке {channel_id}: {e}")
+            elapsed = time.time() - start_time
+            logger.error(f"❌ Неожиданная ошибка при проверке {channel_id} за {elapsed:.2f}s: {e}")
             return False
 
     async def get_invite_links(self) -> Dict[str, str]:
