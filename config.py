@@ -71,6 +71,18 @@ class Settings(BaseSettings):
         description="Окно времени для rate limiting (в секундах)",
     )
 
+    # Кэширование
+    cache_backend: str = Field(
+        default="local",
+        alias="CACHE_BACKEND",
+        description="Бэкенд кэша: local (In-Memory) или redis",
+    )
+    redis_url: str | None = Field(
+        default=None,
+        alias="REDIS_URL",
+        description="URL подключения к Redis (требуется, если CACHE_BACKEND=redis)",
+    )
+
     @field_validator("channel_ids_raw", mode="before")
     @classmethod
     def parse_channel_ids(cls, value: str) -> str:

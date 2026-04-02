@@ -3,7 +3,7 @@
 """
 
 from aiogram import Router, F, Bot
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 
@@ -814,17 +814,50 @@ async def admin_stats(callback: CallbackQuery, stats_manager: StatsManager):
     """
     Показ статистики бота.
     """
-    users_count = await stats_manager.get_users_count()
-    clicks_stats = await stats_manager.get_stats()
-
-    text = STATS_TEXT.format(
-        users_count=users_count,
-        clicks="\n".join(f"• {name}: {clicks}" for name, clicks in clicks_stats),
-    )
-
-    keyboard = get_back_button("admin_main")
-
-    await callback.message.edit_text( text=text, reply_markup=keyboard, parse_mode="HTML")
+    logger.debug(f"admin_stats: пользователь {callback.from_user.id}")
+    
+    try:
+        # Получаем общую статистику пользователей
+        total_users = await stats_manager.get_users_count()
+        new_users_24h = await stats_manager.get_new_users_count(24)
+        new_users_7d = await stats_manager.get_new_users_count(24 * 7)
+        
+        # Получаем статистику по кнопкам
+        button_stats = await stats_manager.get_stats()
+        
+        # Формируем текст статистики пользователей
+        stats_text = "📊 <b>Статистика бота</b>\n\n"
+        stats_text += "👥 <b>Пользователи:</b>\n"
+        stats_text += f"• Всего: {total_users}\n"
+        stats_text += f"• За 24 часа: +{new_users_24h}\n"
+        stats_text += f"• За 7 дней: +{new_users_7d}\n\n"
+        
+        # Статистика кнопок
+        stats_text += "🔘 <b>Нажатия кнопок:</b>\n"
+        if button_stats:
+            for button_name, button_label, clicks in button_stats:
+                stats_text += f"• {button_label}: {clicks}\n"
+        else:
+            stats_text += "• Нет данных\n"
+        
+        # Клавиатура с кнопкой сброса
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="🔙 Назад", callback_data="admin_main")],
+                [InlineKeyboardButton(text="⚠️ Сбросить статистику", callback_data="reset_stats_confirm")],
+            ]
+        )
+        
+        await callback.message.edit_text(
+            text=stats_text,
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
+        logger.info(f"admin_stats: статистика отображена пользователю {callback.from_user.id}")
+        
+    except Exception as e:
+        logger.error(f"admin_stats: ошибка при получении статистики: {e}", exc_info=True)
+        await callback.answer("❌ Ошибка при получении статистики", show_alert=True)
 
 
 # ========== РАССЫЛКА ==========
@@ -834,8 +867,11 @@ async def admin_broadcast(callback: CallbackQuery):
     """
     Меню рассылки.
     """
+    logger.debug(f"admin_broadcast: пользователь {callback.from_user.id}")
+    
     keyboard = get_broadcast_menu()
-    await callback.message.edit_text( text=BROADCAST_TEXT, reply_markup=keyboard)
+    await callback.message.edit_text(text=BROADCAST_TEXT, reply_markup=keyboard)
+    logger.info(f"admin_broadcast: меню рассылки отображено пользователю {callback.from_user.id}")
 
 
 @router.callback_query(F.data == "broadcast_start")
@@ -843,17 +879,66 @@ async def broadcast_start(callback: CallbackQuery, state: FSMContext):
     """
     Начало рассылки.
     """
+    logger.debug(f"broadcast_start: пользователь {callback.from_user.id}")
+    
     await state.set_state(AdminStates.waiting_for_broadcast)
 
     keyboard = get_back_button("admin_broadcast")
 
-    await callback.message.edit_text( 
+    await callback.message.edit_text(
         text="📨 <b>Рассылка сообщений</b>\n\n"
              "Отправьте текст сообщения для всех пользователей бота.\n\n"
              "<i>Поддерживается HTML-разметка.</i>",
         reply_markup=keyboard,
         parse_mode="HTML",
     )
+    logger.info(f"broadcast_start: ожидание текста рассылки от пользователя {callback.from_user.id}")
+
+
+@router.callback_query(F.data == "reset_stats_confirm")
+async def reset_stats_confirm(callback: CallbackQuery):
+    """
+    Подтверждение сброса статистики.
+    """
+    logger.debug(f"reset_stats_confirm: пользователь {callback.from_user.id}")
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Да, сбросить", callback_data="reset_stats_execute")],
+            [InlineKeyboardButton(text="❌ Отмена", callback_data="admin_stats")],
+        ]
+    )
+
+    await callback.message.edit_text(
+        text="⚠️ <b>Вы уверены?</b>\n\nЭто действие сбросит всю статистику нажатий кнопок.\n\nДействие нельзя отменить.",
+        reply_markup=keyboard,
+        parse_mode="HTML"
+    )
+
+
+@router.callback_query(F.data == "reset_stats_execute")
+async def reset_stats_execute(callback: CallbackQuery, stats_manager: StatsManager):
+    """
+    Сброс статистики.
+    """
+    logger.info(f"reset_stats_execute: пользователь {callback.from_user.id} сбрасывает статистику")
+
+    try:
+        success = await stats_manager.reset_stats()
+
+        if success:
+            await callback.answer("✅ Статистика сброшена", show_alert=True)
+            logger.info("reset_stats_execute: статистика успешно сброшена")
+
+            # Возвращаемся к статистике
+            await admin_stats(callback, stats_manager)
+        else:
+            await callback.answer("❌ Ошибка при сбросе статистики", show_alert=True)
+            logger.error("reset_stats_execute: ошибка при сбросе статистики")
+
+    except Exception as e:
+        logger.error(f"reset_stats_execute: ошибка: {e}", exc_info=True)
+        await callback.answer("❌ Ошибка при сбросе статистики", show_alert=True)
 
 
 @router.message(AdminStates.waiting_for_broadcast)
@@ -861,16 +946,27 @@ async def send_broadcast(message: Message, state: FSMContext, db, broadcaster: B
     """
     Отправка рассылки.
     """
+    user_id = message.from_user.id
     text = message.text
+    
+    logger.info(f"send_broadcast: пользователь {user_id} начал рассылку (текст: {text[:50]}...)")
 
     # Получаем всех пользователей
     users = await db_adapter.fetchall("SELECT telegram_id FROM users")
-
     count = len(users)
+    
+    logger.info(f"send_broadcast: рассылка для {count} пользователей")
     await message.answer(f"📨 Начало рассылки для {count} пользователей...")
 
     # Запускаем рассылку
     stats = await broadcaster.broadcast(text)
+    
+    logger.info(
+        f"send_broadcast: рассылка завершена | "
+        f"Доставлено: {stats['success']}, "
+        f"Заблокировано: {stats['blocked']}, "
+        f"Ошибок: {stats['errors']}"
+    )
 
     await message.answer(
         f"✅ Рассылка завершена!\n\n"
@@ -880,6 +976,7 @@ async def send_broadcast(message: Message, state: FSMContext, db, broadcaster: B
     )
 
     await state.clear()
+    logger.debug(f"send_broadcast: состояние очищено для пользователя {user_id}")
 
 
 # ========== ВЫХОД ИЗ АДМИНКИ ==========
@@ -918,7 +1015,7 @@ async def cmd_cache(message: Message):
     if not settings.is_admin(message.from_user.id):
         return
 
-    from utils.cache import get_cache_stats, cache
+    from utils.cache import get_cache_stats, get_cache
 
     args = message.text.split(maxsplit=1)
     command = args[1] if len(args) > 1 else "stats"
@@ -930,7 +1027,8 @@ async def cmd_cache(message: Message):
 
     elif command == "clear":
         # Очистить весь кэш
-        await cache.clear()
+        cache_backend = get_cache()
+        await cache_backend.clear()
         await message.answer("🧹 Кэш полностью очищен")
 
     else:

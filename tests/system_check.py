@@ -155,7 +155,7 @@ class SystemChecker:
         return True
 
     async def check_database(self) -> bool:
-        """Проверка подключения к БД."""
+        """Проверка подключения к БД и схемы таблиц."""
         self.log_info("Проверка базы данных...")
 
         try:
@@ -171,6 +171,27 @@ class SystemChecker:
                     await cursor.execute(f"SELECT COUNT(*) FROM {table}")
                     count = await cursor.fetchone()
                     self.log_pass(f"Таблица {table}: {count[0]} записей")
+                
+                # Проверка схемы таблицы stats
+                self.log_info("Проверка схемы таблицы stats...")
+                await cursor.execute("PRAGMA table_info(stats)")
+                columns = await cursor.fetchall()
+                column_names = [col[1] for col in columns]
+                
+                required_columns = ["button_name", "clicks"]
+                for col in required_columns:
+                    if col in column_names:
+                        self.log_pass(f"Колонка stats.{col}: ✓")
+                    else:
+                        self.log_error(f"Колонка stats.{col}: ✗ отсутствует")
+                
+                # Проверка новых колонок (миграция 005)
+                optional_columns = ["button_label", "last_clicked"]
+                for col in optional_columns:
+                    if col in column_names:
+                        self.log_pass(f"Колонка stats.{col}: ✓ (миграция 005 применена)")
+                    else:
+                        self.log_warning(f"Колонка stats.{col}: ⚠ отсутствует (требуется миграция 005)")
 
             await db.disconnect()
             return True

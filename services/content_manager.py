@@ -60,8 +60,9 @@ class ContentManager:
         cache_key = f"content:get_content:{section}"
 
         # Проверяем кэш
-        from utils.cache import cache as cache_service
-        cached_result = await cache_service.get(cache_key)
+        from utils.cache import get_cache
+        cache_backend = get_cache()
+        cached_result = await cache_backend.get(cache_key)
         if cached_result is not None:
             logger.debug(f"Кэш: get_content({section}) -> {cached_result[:50]}...")
             return cached_result
@@ -75,7 +76,7 @@ class ContentManager:
 
         # Сохраняем в кэш на 300 секунд
         if result is not None:
-            await cache_service.set(cache_key, result, 300)
+            await cache_backend.set(cache_key, result, 300)
             logger.debug(f"Кэш: get_content({section}) -> кэшировано (TTL: 300s)")
 
         return result
@@ -113,8 +114,9 @@ class ContentManager:
             if success:
                 # Очищаем кэш для этого раздела
                 cache_key = f"content:get_content:{section}"
-                from utils.cache import cache as cache_service
-                await cache_service.delete(cache_key)
+                from utils.cache import get_cache
+                cache_backend = get_cache()
+                await cache_backend.delete(cache_key)
 
                 logger.info(f"Контент раздела '{section}' обновлён")
                 return True
@@ -303,53 +305,138 @@ class StatsManager:
     def __init__(self, db):
         self.db = db_adapter
 
-    async def increment_click(self, button_name: str) -> None:
+    async def increment_click(self, button_name: str, button_label: str = "") -> None:
         """
         Увеличить счётчик нажатий кнопки.
 
         Args:
-            button_name: Ключ кнопки
+            button_name: Ключ кнопки (например, 'about')
+            button_label: Читаемое название кнопки (например, '👤 Обо мне')
         """
         try:
-            if db_adapter.db_type == "postgresql":
-                await self.db.execute(
-                    """
-                    INSERT INTO stats (button_name, clicks) VALUES (?, 1)
-                    ON CONFLICT (button_name) DO UPDATE SET clicks = stats.clicks + 1
-                    """,
-                    button_name,
-                )
+            # Обновляем label если он передан
+            if button_label:
+                if db_adapter.db_type == "postgresql":
+                    await self.db.execute(
+                        """
+                        INSERT INTO stats (button_name, button_label, clicks, last_clicked) 
+                        VALUES (?, ?, 1, CURRENT_TIMESTAMP)
+                        ON CONFLICT (button_name) DO UPDATE SET 
+                            clicks = stats.clicks + 1,
+                            button_label = EXCLUDED.button_label,
+                            last_clicked = CURRENT_TIMESTAMP
+                        """,
+                        button_name, button_label,
+                    )
+                else:
+                    await self.db.execute(
+                        """
+                        INSERT INTO stats (button_name, button_label, clicks, last_clicked)
+                        VALUES (?, ?, 1, CURRENT_TIMESTAMP)
+                        ON CONFLICT(button_name)
+                        DO UPDATE SET 
+                            clicks = clicks + 1,
+                            button_label = ?,
+                            last_clicked = CURRENT_TIMESTAMP
+                        """,
+                        button_name, button_label, button_label,
+                    )
             else:
-                await self.db.execute(
-                    """
-                    INSERT INTO stats (button_name, clicks)
-                    VALUES (?, 1)
-                    ON CONFLICT(button_name)
-                    DO UPDATE SET clicks = clicks + 1
-                    """,
-                    button_name,
-                )
+                if db_adapter.db_type == "postgresql":
+                    await self.db.execute(
+                        """
+                        INSERT INTO stats (button_name, clicks, last_clicked) VALUES (?, 1, CURRENT_TIMESTAMP)
+                        ON CONFLICT (button_name) DO UPDATE SET clicks = stats.clicks + 1,
+                            last_clicked = CURRENT_TIMESTAMP
+                        """,
+                        button_name,
+                    )
+                else:
+                    await self.db.execute(
+                        """
+                        INSERT INTO stats (button_name, clicks, last_clicked)
+                        VALUES (?, 1, CURRENT_TIMESTAMP)
+                        ON CONFLICT(button_name)
+                        DO UPDATE SET clicks = clicks + 1,
+                            last_clicked = CURRENT_TIMESTAMP
+                        """,
+                        button_name,
+                    )
+            logger.debug(f"📊 StatsManager: счётчик '{button_name}' ({button_label}) увеличен")
         except Exception as e:
-            logger.error(f"Ошибка обновления статистики {button_name}: {e}")
+            logger.error(f"❌ StatsManager: ошибка обновления статистики {button_name}: {e}")
 
-    async def get_stats(self) -> list[tuple[str, int]]:
+    async def get_stats(self) -> list[tuple[str, str, int]]:
         """
-        Получить статистику нажатий.
+        Получить статистику нажатий с читаемыми названиями.
 
         Returns:
-            Список кортежей (button_name, clicks)
+            Список кортежей (button_name, button_label, clicks)
         """
-        return await self.db.fetchall("SELECT button_name, clicks FROM stats ORDER BY clicks DESC")
+        logger.debug("📊 StatsManager: получение статистики нажатий")
+        result = await self.db.fetchall(
+            "SELECT button_name, button_label, clicks FROM stats ORDER BY clicks DESC"
+        )
+        logger.debug(f"📊 StatsManager: получено {len(result)} записей статистики")
+        return result
+
+    async def reset_stats(self) -> bool:
+        """
+        Сбросить всю статистику.
+
+        Returns:
+            True если успешно
+        """
+        try:
+            logger.info("📊 StatsManager: сброс статистики")
+            if db_adapter.db_type == "postgresql":
+                await self.db.execute("UPDATE stats SET clicks = 0, last_clicked = CURRENT_TIMESTAMP")
+            else:
+                await self.db.execute("UPDATE stats SET clicks = 0, last_clicked = CURRENT_TIMESTAMP")
+            logger.info("✅ StatsManager: статистика сброшена")
+            return True
+        except Exception as e:
+            logger.error(f"❌ StatsManager: ошибка сброса статистики: {e}")
+            return False
 
     async def get_users_count(self) -> int:
+        """Получить количество пользователей."""
+        logger.debug("📊 StatsManager: получение количества пользователей")
+        row = await self.db.fetchone("SELECT COUNT(*) FROM users")
+        return row[0] if row else 0
+
+    async def get_new_users_count(self, hours: int = 24) -> int:
         """
-        Получить количество пользователей.
+        Получить количество новых пользователей за последние N часов.
+
+        Args:
+            hours: Количество часов
 
         Returns:
             Количество пользователей
         """
-        row = await self.db.fetchone("SELECT COUNT(*) FROM users")
-        return row[0] if row else 0
+        try:
+            if db_adapter.db_type == "postgresql":
+                row = await self.db.fetchone(
+                    """
+                    SELECT COUNT(*) FROM users 
+                    WHERE created_at >= NOW() - INTERVAL '%s hours'
+                    """ % hours,
+                )
+            else:
+                row = await self.db.fetchone(
+                    """
+                    SELECT COUNT(*) FROM users 
+                    WHERE created_at >= datetime('now', ? || ' hours')
+                    """,
+                    f"-{hours}",
+                )
+            result = row[0] if row else 0
+            logger.debug(f"📊 StatsManager: новых пользователей за {hours}ч: {result}")
+            return result
+        except Exception as e:
+            logger.error(f"❌ StatsManager: ошибка получения новых пользователей: {e}")
+            return 0
 
 
 class PhotoManager:
@@ -376,8 +463,9 @@ class PhotoManager:
             logger.debug(f"PhotoManager.get_photo: запрос photo_type={photo_type}")
 
             # Проверяем кэш
-            from utils.cache import cache as cache_service
-            cached_result = await cache_service.get(cache_key)
+            from utils.cache import get_cache
+            cache_backend = get_cache()
+            cached_result = await cache_backend.get(cache_key)
             if cached_result is not None:
                 logger.debug(f"PhotoManager.get_photo: найдено в кэше photo_type={photo_type}, file_id={cached_result[:20]}...")
                 return cached_result
@@ -392,7 +480,7 @@ class PhotoManager:
             if result:
                 logger.debug(f"PhotoManager.get_photo: получено из БД photo_type={photo_type}, file_id={result[:20]}...")
                 # Сохраняем в кэш на 300 секунд
-                await cache_service.set(cache_key, result, 300)
+                await cache_backend.set(cache_key, result, 300)
                 logger.debug(f"PhotoManager.get_photo: сохранено в кэш photo_type={photo_type} (TTL: 300s)")
             else:
                 logger.debug(f"PhotoManager.get_photo: фото не найдено photo_type={photo_type}")
@@ -437,8 +525,9 @@ class PhotoManager:
             if success:
                 # Очищаем кэш для этого типа фото
                 cache_key = f"photo:get_photo:{photo_type}"
-                from utils.cache import cache as cache_service
-                await cache_service.delete(cache_key)
+                from utils.cache import get_cache
+                cache_backend = get_cache()
+                await cache_backend.delete(cache_key)
                 logger.debug(f"PhotoManager.set_photo: кэш очищен для photo_type={photo_type}")
 
                 logger.info(f"PhotoManager.set_photo: фото '{photo_type}' установлено (file_id: {file_id[:20]}...)")
@@ -470,8 +559,9 @@ class PhotoManager:
             if success:
                 # Очищаем кэш
                 cache_key = f"photo:get_photo:{photo_type}"
-                from utils.cache import cache as cache_service
-                await cache_service.delete(cache_key)
+                from utils.cache import get_cache
+                cache_backend = get_cache()
+                await cache_backend.delete(cache_key)
                 logger.debug(f"PhotoManager.delete_photo: кэш очищен для photo_type={photo_type}")
 
                 logger.info(f"PhotoManager.delete_photo: фото '{photo_type}' удалено")

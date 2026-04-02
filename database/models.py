@@ -40,9 +40,10 @@ CREATE TABLE IF NOT EXISTS channels (
 -- Таблица статистики (счётчик нажатий)
 CREATE TABLE IF NOT EXISTS stats (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    button_name TEXT NOT NULL,
+    button_name TEXT UNIQUE NOT NULL,
+    button_label TEXT NOT NULL DEFAULT '',
     clicks INTEGER DEFAULT 0,
-    UNIQUE(button_name)
+    last_clicked DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Таблица фото (приветствие и главное меню)
@@ -98,9 +99,10 @@ CREATE TABLE IF NOT EXISTS channels (
 -- Таблица статистики (счётчик нажатий)
 CREATE TABLE IF NOT EXISTS stats (
     id SERIAL PRIMARY KEY,
-    button_name TEXT NOT NULL,
+    button_name TEXT UNIQUE NOT NULL,
+    button_label TEXT NOT NULL DEFAULT '',
     clicks INTEGER DEFAULT 0,
-    UNIQUE(button_name)
+    last_clicked TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Таблица фото (приветствие и главное меню)
@@ -143,6 +145,7 @@ INSERT OR IGNORE INTO buttons (name, label, is_active) VALUES
     ('contact', '📝 Заказать', 1);
 
 -- Статистика (пустые счётчики)
+-- Примечание: button_label будет обновлён миграцией 005
 INSERT OR IGNORE INTO stats (button_name, clicks) VALUES
     ('about', 0),
     ('tech', 0),
@@ -179,6 +182,7 @@ INSERT INTO buttons (name, label, is_active) VALUES
 ON CONFLICT (name) DO NOTHING;
 
 -- Статистика (пустые счётчики)
+-- Примечание: button_label будет обновлён миграцией 005
 INSERT INTO stats (button_name, clicks) VALUES
     ('about', 0),
     ('tech', 0),
