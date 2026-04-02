@@ -41,13 +41,18 @@ async def handle_menu_button(
 
     user_id = message.from_user.id
     chat_id = message.chat.id
+    
+    logger.debug(f"🔘 handle_menu_button: пользователь {user_id} нажал кнопку '{button_text}'")
 
     # Находим ключ раздела по названию кнопки
     section_key = await _get_section_by_label(db, button_text)
 
     if not section_key:
         # Неизвестная кнопка (например, "🔧 Админка" — обрабатывается в admin.py)
+        logger.debug(f"🔘 handle_menu_button: неизвестная кнопка '{button_text}' от пользователя {user_id}")
         return
+    
+    logger.debug(f"🔘 handle_menu_button: кнопка '{button_text}' -> раздел {section_key}")
 
     # Проверяем, не нажал ли пользователь ту же кнопку недавно (debouncing)
     current_time = asyncio.get_event_loop().time()
@@ -58,7 +63,7 @@ async def handle_menu_button(
         # Если нажата та же кнопка и прошло меньше DEBOUNCE_SECONDS — игнорируем
         if last_click["section"] == section_key and time_diff < DEBOUNCE_SECONDS:
             logger.debug(
-                f"Пользователь {user_id}: пропущено дублирующееся нажатие на {section_key} "
+                f"🔘 handle_menu_button: пропущено дублирующееся нажатие на {section_key} "
                 f"(прошло {time_diff:.2f}с)"
             )
             return
@@ -74,12 +79,13 @@ async def handle_menu_button(
 
     if last_section == section_key:
         logger.debug(
-            f"Пользователь {user_id}: раздел {section_key} уже открыт, пропускаем"
+            f"🔘 handle_menu_button: раздел {section_key} уже открыт у пользователя {user_id}, пропускаем"
         )
         return
 
-    # Обновляем статистику
-    await stats_manager.increment_click(section_key)
+    # Обновляем статистику с передачей читаемого названия кнопки
+    logger.debug(f"🔘 handle_menu_button: обновление статистики для {section_key} ({button_text})")
+    await stats_manager.increment_click(section_key, button_text)
 
     # Получаем контент из БД
     content = await content_manager.get_content(section_key)
@@ -90,7 +96,7 @@ async def handle_menu_button(
 
         # Проверяем наличие фото главного меню
         main_menu_photo_id = await photo_manager.get_photo("main_menu")
-        
+
         if main_menu_photo_id:
             # Отправляем фото с текстом и caption
             await message_manager.send_or_edit_photo(
@@ -112,7 +118,7 @@ async def handle_menu_button(
                 reply_markup=None,
                 parse_mode="HTML",
             )
-        logger.debug(f"Пользователь {user_id} открыл раздел {section_key}")
+        logger.info(f"✅ Пользователь {user_id} открыл раздел {section_key}")
     else:
         await message_manager.send_or_edit(
             bot=bot,
@@ -122,7 +128,7 @@ async def handle_menu_button(
             reply_markup=None,
             parse_mode="HTML",
         )
-        logger.warning(f"Раздел {section_key} не найден в БД")
+        logger.warning(f"⚠️ Раздел {section_key} не найден в БД")
 
 
 async def _get_section_by_label(db, label: str) -> str | None:

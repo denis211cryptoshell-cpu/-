@@ -60,7 +60,7 @@ class Broadcaster:
         """
         # САНТИЗИРУЕМ текст рассылки
         clean_text = sanitize_html(text)
-        
+
         if clean_text != text:
             logger.warning("Текст рассылки был очищен от опасного HTML")
             logger.debug(f"Исходный: {text[:100]}...")
@@ -72,10 +72,12 @@ class Broadcaster:
         users = await self.db.fetchall("SELECT telegram_id FROM users")
 
         total = len(users)
-        logger.info(f"Начало рассылки для {total} пользователей")
+        logger.info(f"📨 Рассылка: начало для {total} пользователей")
 
         for i, (user_id,) in enumerate(users, 1):
             try:
+                logger.debug(f"📨 Рассылка [{i}/{total}]: отправка пользователю {user_id}")
+                
                 await self.bot.send_message(
                     chat_id=user_id,
                     text=clean_text,
@@ -83,30 +85,39 @@ class Broadcaster:
                     reply_markup=reply_markup,
                 )
                 stats["success"] += 1
+                logger.debug(f"✅ Рассылка [{i}/{total}]: доставлено пользователю {user_id}")
 
                 # Лимит Telegram: ~30 сообщений в секунду
                 await asyncio.sleep(0.035)
 
             except TelegramRetryAfter as e:
                 # Лимит рассылки — ждём указанное время
-                logger.warning(f"Лимит рассылки: ждём {e.retry_after} сек")
+                logger.warning(f"⏳ Рассылка: лимит Telegram, ждём {e.retry_after} сек")
                 await asyncio.sleep(e.retry_after)
                 stats["success"] += 1
 
             except TelegramBadRequest as e:
-                if "bot was blocked" in str(e).lower():
+                error_msg = str(e).lower()
+                if "bot was blocked" in error_msg or "blocked" in error_msg:
                     stats["blocked"] += 1
+                    logger.debug(f"🚫 Рассылка [{i}/{total}]: пользователь {user_id} заблокировал бота")
                 else:
                     stats["errors"] += 1
-                    logger.error(f"Ошибка рассылки пользователю {user_id}: {e}")
+                    logger.error(f"❌ Рассылка [{i}/{total}]: ошибка пользователю {user_id}: {e}")
 
             except Exception as e:
                 stats["errors"] += 1
-                logger.error(f"Неожиданная ошибка рассылки пользователю {user_id}: {e}")
+                logger.error(f"❌ Рассылка [{i}/{total}]: неожиданная ошибка пользователю {user_id}: {e}", exc_info=True)
 
             # Callback для прогресса
             if progress_callback:
                 await progress_callback(i, total)
 
-        logger.info(f"Рассылка завершена: {stats}")
+        logger.info(
+            f"✅ Рассылка завершена: "
+            f"Всего={total}, "
+            f"Доставлено={stats['success']}, "
+            f"Заблокировано={stats['blocked']}, "
+            f"Ошибок={stats['errors']}"
+        )
         return stats

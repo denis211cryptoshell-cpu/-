@@ -140,13 +140,12 @@ def get_channels_manage_menu() -> InlineKeyboardMarkup:
 def get_broadcast_menu() -> InlineKeyboardMarkup:
     """
     Меню рассылки сообщений.
-    
+
     Returns:
         InlineKeyboardMarkup с опциями рассылки
     """
     keyboard = [
         [InlineKeyboardButton(text="📨 Отправить всем", callback_data="broadcast_start")],
-        [InlineKeyboardButton(text="📊 Статистика рассылок", callback_data="broadcast_stats")],
         [InlineKeyboardButton(text="🔙 Назад", callback_data="admin_main")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=keyboard)

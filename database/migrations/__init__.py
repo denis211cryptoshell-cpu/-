@@ -25,6 +25,10 @@ MIGRATIONS = [
         "name": "004_add_photos_table",
         "description": "Добавление таблицы photos для хранения фото (приветствие и главное меню)",
     },
+    {
+        "name": "005_add_last_seen_stats",
+        "description": "Добавление колонок button_label и last_clicked в таблицу stats",
+    },
 ]
 
 

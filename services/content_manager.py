@@ -305,53 +305,138 @@ class StatsManager:
     def __init__(self, db):
         self.db = db_adapter
 
-    async def increment_click(self, button_name: str) -> None:
+    async def increment_click(self, button_name: str, button_label: str = "") -> None:
         """
         Увеличить счётчик нажатий кнопки.
 
         Args:
-            button_name: Ключ кнопки
+            button_name: Ключ кнопки (например, 'about')
+            button_label: Читаемое название кнопки (например, '👤 Обо мне')
         """
         try:
-            if db_adapter.db_type == "postgresql":
-                await self.db.execute(
-                    """
-                    INSERT INTO stats (button_name, clicks) VALUES (?, 1)
-                    ON CONFLICT (button_name) DO UPDATE SET clicks = stats.clicks + 1
-                    """,
-                    button_name,
-                )
+            # Обновляем label если он передан
+            if button_label:
+                if db_adapter.db_type == "postgresql":
+                    await self.db.execute(
+                        """
+                        INSERT INTO stats (button_name, button_label, clicks, last_clicked) 
+                        VALUES (?, ?, 1, CURRENT_TIMESTAMP)
+                        ON CONFLICT (button_name) DO UPDATE SET 
+                            clicks = stats.clicks + 1,
+                            button_label = EXCLUDED.button_label,
+                            last_clicked = CURRENT_TIMESTAMP
+                        """,
+                        button_name, button_label,
+                    )
+                else:
+                    await self.db.execute(
+                        """
+                        INSERT INTO stats (button_name, button_label, clicks, last_clicked)
+                        VALUES (?, ?, 1, CURRENT_TIMESTAMP)
+                        ON CONFLICT(button_name)
+                        DO UPDATE SET 
+                            clicks = clicks + 1,
+                            button_label = ?,
+                            last_clicked = CURRENT_TIMESTAMP
+                        """,
+                        button_name, button_label, button_label,
+                    )
             else:
-                await self.db.execute(
-                    """
-                    INSERT INTO stats (button_name, clicks)
-                    VALUES (?, 1)
-                    ON CONFLICT(button_name)
-                    DO UPDATE SET clicks = clicks + 1
-                    """,
-                    button_name,
-                )
+                if db_adapter.db_type == "postgresql":
+                    await self.db.execute(
+                        """
+                        INSERT INTO stats (button_name, clicks, last_clicked) VALUES (?, 1, CURRENT_TIMESTAMP)
+                        ON CONFLICT (button_name) DO UPDATE SET clicks = stats.clicks + 1,
+                            last_clicked = CURRENT_TIMESTAMP
+                        """,
+                        button_name,
+                    )
+                else:
+                    await self.db.execute(
+                        """
+                        INSERT INTO stats (button_name, clicks, last_clicked)
+                        VALUES (?, 1, CURRENT_TIMESTAMP)
+                        ON CONFLICT(button_name)
+                        DO UPDATE SET clicks = clicks + 1,
+                            last_clicked = CURRENT_TIMESTAMP
+                        """,
+                        button_name,
+                    )
+            logger.debug(f"📊 StatsManager: счётчик '{button_name}' ({button_label}) увеличен")
         except Exception as e:
-            logger.error(f"Ошибка обновления статистики {button_name}: {e}")
+            logger.error(f"❌ StatsManager: ошибка обновления статистики {button_name}: {e}")
 
-    async def get_stats(self) -> list[tuple[str, int]]:
+    async def get_stats(self) -> list[tuple[str, str, int]]:
         """
-        Получить статистику нажатий.
+        Получить статистику нажатий с читаемыми названиями.
 
         Returns:
-            Список кортежей (button_name, clicks)
+            Список кортежей (button_name, button_label, clicks)
         """
-        return await self.db.fetchall("SELECT button_name, clicks FROM stats ORDER BY clicks DESC")
+        logger.debug("📊 StatsManager: получение статистики нажатий")
+        result = await self.db.fetchall(
+            "SELECT button_name, button_label, clicks FROM stats ORDER BY clicks DESC"
+        )
+        logger.debug(f"📊 StatsManager: получено {len(result)} записей статистики")
+        return result
+
+    async def reset_stats(self) -> bool:
+        """
+        Сбросить всю статистику.
+
+        Returns:
+            True если успешно
+        """
+        try:
+            logger.info("📊 StatsManager: сброс статистики")
+            if db_adapter.db_type == "postgresql":
+                await self.db.execute("UPDATE stats SET clicks = 0, last_clicked = CURRENT_TIMESTAMP")
+            else:
+                await self.db.execute("UPDATE stats SET clicks = 0, last_clicked = CURRENT_TIMESTAMP")
+            logger.info("✅ StatsManager: статистика сброшена")
+            return True
+        except Exception as e:
+            logger.error(f"❌ StatsManager: ошибка сброса статистики: {e}")
+            return False
 
     async def get_users_count(self) -> int:
+        """Получить количество пользователей."""
+        logger.debug("📊 StatsManager: получение количества пользователей")
+        row = await self.db.fetchone("SELECT COUNT(*) FROM users")
+        return row[0] if row else 0
+
+    async def get_new_users_count(self, hours: int = 24) -> int:
         """
-        Получить количество пользователей.
+        Получить количество новых пользователей за последние N часов.
+
+        Args:
+            hours: Количество часов
 
         Returns:
             Количество пользователей
         """
-        row = await self.db.fetchone("SELECT COUNT(*) FROM users")
-        return row[0] if row else 0
+        try:
+            if db_adapter.db_type == "postgresql":
+                row = await self.db.fetchone(
+                    """
+                    SELECT COUNT(*) FROM users 
+                    WHERE created_at >= NOW() - INTERVAL '%s hours'
+                    """ % hours,
+                )
+            else:
+                row = await self.db.fetchone(
+                    """
+                    SELECT COUNT(*) FROM users 
+                    WHERE created_at >= datetime('now', ? || ' hours')
+                    """,
+                    f"-{hours}",
+                )
+            result = row[0] if row else 0
+            logger.debug(f"📊 StatsManager: новых пользователей за {hours}ч: {result}")
+            return result
+        except Exception as e:
+            logger.error(f"❌ StatsManager: ошибка получения новых пользователей: {e}")
+            return 0
 
 
 class PhotoManager:
